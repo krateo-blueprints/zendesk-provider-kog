@@ -34,6 +34,11 @@ spec:
     verbsDescription:
       - action: create
         method: POST
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/ticket_fields
         requestTransform:
           inline: '{ticket_field: .}'
@@ -41,6 +46,11 @@ spec:
           inline: 'if (.ticket_field | type) == "object" then .ticket_field else . end'
       - action: get
         method: GET
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/ticket_fields/{ticket_field_id}
         fieldMapping:
           - inPath: ticket_field_id
@@ -49,6 +59,11 @@ spec:
           inline: 'if (.ticket_field | type) == "object" then .ticket_field else . end'
       - action: update
         method: PUT
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/ticket_fields/{ticket_field_id}
         fieldMapping:
           - inPath: ticket_field_id
@@ -60,6 +75,11 @@ spec:
       # Hard delete of the custom field (and its values on tickets); the verification GET answers 404.
       - action: delete
         method: DELETE
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/ticket_fields/{ticket_field_id}
         fieldMapping:
           - inPath: ticket_field_id

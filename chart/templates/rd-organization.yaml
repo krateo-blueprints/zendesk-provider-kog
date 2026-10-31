@@ -31,6 +31,11 @@ spec:
     verbsDescription:
       - action: create
         method: POST
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/organizations
         requestTransform:
           inline: '{organization: .}'
@@ -38,6 +43,11 @@ spec:
           inline: 'if (.organization | type) == "object" then .organization else . end'
       - action: get
         method: GET
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/organizations/{organization_id}
         fieldMapping:
           - inPath: organization_id
@@ -46,6 +56,11 @@ spec:
           inline: 'if (.organization | type) == "object" then .organization else . end'
       - action: update
         method: PUT
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/organizations/{organization_id}
         fieldMapping:
           - inPath: organization_id
@@ -57,6 +72,11 @@ spec:
       # Hard delete; the verification GET then answers 404.
       - action: delete
         method: DELETE
+        # Zendesk is a JSON-only API: a request without Accept: application/json (or a .json path)
+        # is refused with 415 \"Please use .json extension or application/json Accept header\",
+        # even a bodiless GET. (415 is Zendesk's choice; the header that matters is Accept, not Content-Type.)
+        headers:
+          - {name: Accept, value: application/json}
         path: /api/v2/organizations/{organization_id}
         fieldMapping:
           - inPath: organization_id
