@@ -1,7 +1,7 @@
 ---
 type: Configuration
 title: zendesk-provider-kog — configuration
-description: The whole config surface — the chart values resourceGroup and zendeskSubdomain, the four RestDefinition mappings (identifiers, status fields, compareScope, verbs, envelope transforms), the per-field compared / create-only / excluded decisions with reasons, every deviation from Zendesk's OpenAPI document, and the invariants hack/assert-drift-invariants.py enforces.
+description: The whole config surface — the chart values resourceGroup, zendeskSubdomain and oauth.rotation, the four RestDefinition mappings (identifiers, status fields, compareScope, verbs, envelope transforms), the per-field compared / create-only / excluded decisions with reasons, every deviation from Zendesk's OpenAPI document, and the invariants hack/assert-drift-invariants.py enforces.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, values, restdefinition, oasgen-provider, zendesk]
 timestamp: 2026-10-31T00:00:00Z
@@ -15,6 +15,12 @@ timestamp: 2026-10-31T00:00:00Z
 |-------|---------|-------|
 | `resourceGroup` | `zendesk.krateo.io` | API group of the 4 resource CRDs and their 4 Configuration CRDs |
 | `zendeskSubdomain` | `""` | **Required.** DNS label only; substituted into every asset's server URL at render time |
+| `oauth.rotation.enabled` | `false` | Ship the ESO `Webhook` generator + `ExternalSecret` that keep the bearer token Secret fresh (requires ESO ≥ 2.x) |
+| `oauth.rotation.clientSecretName` | `zendesk-oauth-client` | Secret with `client_id` and `client_secret`; must be labelled `external-secrets.io/type=webhook` |
+| `oauth.rotation.tokenSecretName` | `zendesk-oauth-token` | Secret ESO writes; its `access_token` key is what every `<Kind>Configuration` references |
+| `oauth.rotation.scope` | `read write` | OAuth scope requested |
+| `oauth.rotation.expiresIn` | `7200` | Requested token lifetime in seconds (Zendesk allows 300 to 172800) |
+| `oauth.rotation.refreshInterval` | `1h` | How often ESO mints a new token; keep it well under `expiresIn` |
 
 Resource CRs are `zendesk.krateo.io/v2` (from each asset's `info.version: v2`); Configuration CRs are
 `zendesk.krateo.io/v1alpha1`.
@@ -93,7 +99,7 @@ Each one is commented where it is made in `chart/assets/<kind>.yaml`. In summary
 - Request and response bodies are declared **unwrapped**; the RestDefinitions restore the envelope.
 - `info.version` is `v2` (official `2.0.0` would become CRD version `v2-0-0`).
 - The `subdomain` server-variable default is `your-subdomain` (official `example`).
-- Security schemes are trimmed to `basicAuth` (official also has bearer and OAuth2).
+- Security schemes are trimmed to `bearerAuth` (official also has basic and OAuth2). Basic is API-token auth, which Zendesk is removing; the oauth2 scheme isn't used because the controller does not mint tokens (ESO does).
 - Path ids are declared `string` (official int64), the form a path parameter is substituted in.
 - Query parameters (sideloads, payload options) are dropped, because they would become spec fields.
 - `oneOf` unions are trimmed to one branch: Ticket `requester` (object), `tags` (array),

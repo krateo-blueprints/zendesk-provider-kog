@@ -1,7 +1,7 @@
 ---
 type: Usage
 title: zendesk-provider-kog — usage
-description: How to run the provider — install it as a Krateo component with the Zendesk subdomain, provision the API-token Secret and one Configuration per kind, create Organization, Group, TicketField and Ticket CRs in dependency order, and verify the generated CRDs and controllers.
+description: How to run the provider — install it as a Krateo component with the Zendesk subdomain, provision the OAuth client Secret (the External Secrets Operator keeps the bearer token fresh) and one Configuration per kind, create Organization, Group, TicketField and Ticket CRs in dependency order, and verify the generated CRDs and controllers.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, install, oasgen-provider, zendesk]
 timestamp: 2026-10-31T00:00:00Z
@@ -29,17 +29,23 @@ $ helm upgrade --install zendesk-provider-kog ./chart -n krateo-system \
 
 ## Credentials
 
-Zendesk API tokens authenticate with HTTP basic: username `<agent-email>/token`, password the token.
-Create the Secret (placeholders shown, never commit real values) and the Configurations:
+The provider authenticates with an OAuth access token (client_credentials grant) sent as a bearer
+token; Zendesk API tokens are being removed (all deactivated 30 April 2027). Access tokens expire and
+no refresh token is issued, so the External Secrets Operator keeps the token Secret fresh
+(`oauth.rotation.enabled=true`; ESO ≥ 2.x must be installed). Create a confidential OAuth client in
+Admin Center, then (placeholders shown; never commit real values):
 
 ```console
-$ kubectl create secret generic zendesk-api-token -n krateo-system \
-    --from-literal=username='<agent-email>/token' \
-    --from-literal=password='<YOUR_ZENDESK_API_TOKEN>'
-$ kubectl apply -f chart/samples/configurations.yaml
+$ kubectl create secret generic zendesk-oauth-client -n krateo-system \
+    --from-literal=client_id='<OAUTH_CLIENT_IDENTIFIER>' \
+    --from-literal=client_secret='<OAUTH_CLIENT_SECRET>'
+$ kubectl label secret zendesk-oauth-client -n krateo-system external-secrets.io/type=webhook
+$ helm upgrade --install zendesk-provider-kog <chart> -n krateo-system \
+    --set zendeskSubdomain=<subdomain> --set oauth.rotation.enabled=true
+$ kubectl apply -f chart/samples/configurations.yaml   # the 4 <Kind>Configuration CRs
 ```
 
-Use an admin agent's token (groups, ticket fields and organizations are admin-managed).
+The OAuth client must act as an admin (groups, ticket fields and organizations are admin-managed).
 
 ## Drive the kinds
 

@@ -19,8 +19,6 @@ spec:
       - key
       - created_at
       - updated_at
-    excludedSpecFields:
-      - ticket_field_id
     # Compares title, description, agent_description, active and required — the update body.
     #
     # The decisive exclusion is custom_field_options. `fullSpec` would compare it (the GET echoes it),

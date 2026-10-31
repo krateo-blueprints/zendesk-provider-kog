@@ -38,3 +38,15 @@ jobs:
       - run: sed -i "s/CHART_VERSION/0.0.0-ci/g" chart/Chart.yaml
       - run: helm lint chart --strict --set zendeskSubdomain=your-subdomain
       - run: helm template zendesk-provider-kog chart -n krateo-system --set zendeskSubdomain=your-subdomain > /dev/null
+      # With OAuth rotation on, the chart must render exactly one ESO Webhook generator and one
+      # ExternalSecret, and the generator must POST the client_credentials grant to /oauth/tokens.
+      - name: render with oauth.rotation.enabled
+        run: |
+          set -euo pipefail
+          out=$(helm template zendesk-provider-kog chart -n krateo-system --set zendeskSubdomain=your-subdomain --set oauth.rotation.enabled=true)
+          [ "$(echo "$out" | grep -c '^kind: Webhook$')" = 1 ] || { echo "::error::expected 1 Webhook generator"; exit 1; }
+          [ "$(echo "$out" | grep -c '^kind: ExternalSecret$')" = 1 ] || { echo "::error::expected 1 ExternalSecret"; exit 1; }
+          echo "$out" | grep -q 'url: "https://your-subdomain.zendesk.com/oauth/tokens"' || { echo "::error::generator URL"; exit 1; }
+          echo "$out" | grep -q 'grant_type=client_credentials' || { echo "::error::grant type"; exit 1; }
+          off=$(helm template zendesk-provider-kog chart -n krateo-system --set zendeskSubdomain=your-subdomain)
+          ! echo "$off" | grep -q -E '^kind: (Webhook|ExternalSecret)$' || { echo "::error::rotation objects rendered while disabled"; exit 1; }

@@ -17,8 +17,6 @@ spec:
       - url
       - created_at
       - updated_at
-    excludedSpecFields:
-      - organization_id
     # Compares name, details, notes, external_id and group_id — the update body, all scalars returned
     # as written (the asset's patterns keep name and external_id inside what Zendesk stores unchanged).
     #

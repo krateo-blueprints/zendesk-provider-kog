@@ -82,10 +82,15 @@ paths:
           description: No content
 components:
   securitySchemes:
-    # Official declares basicAuth, bearerAuth and oauth2; trimmed to basicAuth — see assets/ticket.yaml.
-    basicAuth:
+    # Official declares basicAuth, bearerAuth and oauth2. Trimmed to bearerAuth ONLY: Zendesk is removing
+    # API tokens (no new tokens from late Oct 2026, all deactivated 30 Apr 2027), so this provider
+    # authenticates with an OAuth access token (client_credentials grant) sent as a bearer token.
+    # Those tokens expire and carry no refresh token, so the token Secret is kept fresh by the
+    # External Secrets Operator (oauth.rotation in values.yaml); the controller reads the Secret on
+    # every reconcile, so a rotated token applies without a restart.
+    bearerAuth:
       type: http
-      scheme: basic
+      scheme: bearer
   parameters:
     ticket_field_id:
       name: ticket_field_id
@@ -262,4 +267,4 @@ components:
           type: string
           format: date-time
 security:
-  - basicAuth: []
+  - bearerAuth: []

@@ -14,10 +14,13 @@ Prerequisite: the chart is installed with `zendeskSubdomain` set (see [usage](..
 ## 1. Credentials (once)
 
 ```console
-$ kubectl create secret generic zendesk-api-token -n krateo-system \
-    --from-literal=username='<agent-email>/token' \
-    --from-literal=password='<YOUR_ZENDESK_API_TOKEN>'
-$ kubectl apply -f chart/samples/configurations.yaml
+$ kubectl create secret generic zendesk-oauth-client -n krateo-system \
+    --from-literal=client_id='<OAUTH_CLIENT_IDENTIFIER>' \
+    --from-literal=client_secret='<OAUTH_CLIENT_SECRET>'
+$ kubectl label secret zendesk-oauth-client -n krateo-system external-secrets.io/type=webhook
+$ helm upgrade --install zendesk-provider-kog <chart> -n krateo-system \
+    --set zendeskSubdomain=<subdomain> --set oauth.rotation.enabled=true
+$ kubectl apply -f chart/samples/configurations.yaml   # the 4 <Kind>Configuration CRs
 ```
 
 ## 2. Routing target and tenant

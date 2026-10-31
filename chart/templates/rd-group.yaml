@@ -20,8 +20,6 @@ spec:
       - deleted
       - created_at
       - updated_at
-    excludedSpecFields:
-      - group_id
     # Compares name and description, the whole update body, both returned verbatim. is_public is
     # create-only (a private group cannot be made public), so it must not be compared — which `fullSpec`
     # would do, because the GET echoes it.

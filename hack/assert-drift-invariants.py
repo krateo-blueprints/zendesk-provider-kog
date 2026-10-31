@@ -289,10 +289,13 @@ def main(root="."):
             fail("%s: servers[0].url must be the official template %s, present exactly once; the chart "
                  "substitutes it with the configured subdomain." % (asset, PLACEHOLDER))
 
-        # 10. Auth is HTTP basic (email/token + API token), and only that.
+        # 10. Auth is an OAuth bearer token, and only that. Zendesk API tokens (http/basic) are being
+        #     removed (all deactivated 30 Apr 2027); re-adding basic auth would ship a dead credential path.
         schemes = (doc.get("components") or {}).get("securitySchemes") or {}
-        if schemes != {"basicAuth": {"type": "http", "scheme": "basic"}}:
-            fail("%s: securitySchemes must be exactly basicAuth (http/basic); found %s." % (asset, schemes))
+        if schemes != {"bearerAuth": {"type": "http", "scheme": "bearer"}}:
+            fail("%s: securitySchemes must be exactly bearerAuth (http/bearer); found %s." % (asset, schemes))
+        if doc.get("security") != [{"bearerAuth": []}]:
+            fail("%s: top-level security must be exactly [bearerAuth]." % asset)
 
         # 11. Soft-delete tombstones.
         need = REQUIRED_NOT_FOUND_BODY.get(kind)

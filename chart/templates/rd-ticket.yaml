@@ -24,8 +24,6 @@ spec:
       - updated_at
       - observed
     # ticket_id is server-assigned: never a spec field; get/update/delete source it from status.id.
-    excludedSpecFields:
-      - ticket_id
     # `updatable` compares exactly the update body — subject and external_id — and both are returned
     # verbatim. Everything else in the spec is create-only (see assets/ticket.yaml for each field).
     #
