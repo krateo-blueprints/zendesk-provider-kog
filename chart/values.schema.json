@@ -18,6 +18,54 @@
       "type": "object",
       "title": "Global values",
       "description": "Helm global values (injected by the chart-inspector / when used as a subchart)."
+    },
+    "oauth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rotation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Ship the ESO Webhook generator + ExternalSecret that keep the bearer token Secret fresh."
+            },
+            "clientSecretName": {
+              "type": "string",
+              "minLength": 1,
+              "default": "zendesk-oauth-client",
+              "description": "Secret with client_id and client_secret (labelled external-secrets.io/type=webhook)."
+            },
+            "tokenSecretName": {
+              "type": "string",
+              "minLength": 1,
+              "default": "zendesk-oauth-token",
+              "description": "Secret ESO writes; its access_token key is the bearer token the <Kind>Configurations reference."
+            },
+            "scope": {
+              "type": "string",
+              "minLength": 1,
+              "default": "read write",
+              "description": "OAuth scope requested."
+            },
+            "expiresIn": {
+              "type": "integer",
+              "minimum": 300,
+              "maximum": 172800,
+              "default": 7200,
+              "description": "Requested access-token lifetime in seconds (Zendesk allows 300 to 172800)."
+            },
+            "refreshInterval": {
+              "type": "string",
+              "pattern": "^[0-9]+(s|m|h)$",
+              "default": "1h",
+              "description": "How often ESO mints a new token; keep it well under expiresIn."
+            }
+          }
+        }
+      }
     }
   }
 }

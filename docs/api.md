@@ -1,7 +1,7 @@
 ---
 type: API
 title: zendesk-provider-kog — API
-description: The CRDs this component brings into the cluster — Ticket, Group, Organization and TicketField under zendesk.krateo.io/v2 with their spec, status and verbs, the oasgen-generated <Kind>Configuration kind each one gets (HTTP basic auth from a Secret), and the CompositionDefinition the core-provider CDC derives from values.schema.json.
+description: The CRDs this component brings into the cluster — Ticket, Group, Organization and TicketField under zendesk.krateo.io/v2 with their spec, status and verbs, the oasgen-generated <Kind>Configuration kind each one gets (an OAuth bearer token from a Secret that the External Secrets Operator keeps fresh), and the CompositionDefinition the core-provider CDC derives from values.schema.json.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, crd, compositiondefinition, zendesk, oasgen-provider]
 timestamp: 2026-10-31T00:00:00Z
@@ -33,7 +33,6 @@ Every resource CR also gets `spec.configurationRef`.
 ```yaml
 spec:
   authentication:
-    basic:
-      usernameRef: {name: <secret>, namespace: <ns>, key: username}   # "<agent-email>/token"
-      passwordRef: {name: <secret>, namespace: <ns>, key: password}   # the API token
+    bearer:
+      tokenRef: {name: <secret>, namespace: <ns>, key: access_token}   # the OAuth access token (ESO-rotated)
 ```

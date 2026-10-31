@@ -1,0 +1,54 @@
+{{- /*
+OAuth token rotation by the External Secrets Operator (opt-in: oauth.rotation.enabled).
+
+Zendesk's client_credentials access tokens expire (30 min default, 48 h max) and no refresh token
+is issued, so the integration must mint a new token before the old one lapses. rest-dynamic-
+controller reads the Configuration's Secret on every reconcile (no cache), so rewriting the Secret
+is enough: the next reconcile uses the new token, and a 401 in between is retried.
+
+- Webhook generator: POST https://<zendeskSubdomain>.zendesk.com/oauth/tokens with the OAuth
+  client from oauth.rotation.clientSecretName (keys client_id, client_secret). That Secret must be
+  labelled external-secrets.io/type=webhook, which is how ESO lets a generator read it.
+- ExternalSecret: every refreshInterval, writes the token response into tokenSecretName. Its
+  access_token key is the bearer token every <Kind>Configuration references.
+
+The "{{ "{{" }} .client.* {{ "}}" }}" expressions are ESO's own templates, escaped from Helm.
+*/}}
+{{- if .Values.oauth.rotation.enabled }}
+{{- $r := .Values.oauth.rotation }}
+{{- if not .Values.zendeskSubdomain }}{{ fail "oauth.rotation.enabled needs zendeskSubdomain" }}{{ end }}
+apiVersion: generators.external-secrets.io/v1alpha1
+kind: Webhook
+metadata:
+  name: {{ .Release.Name }}-oauth-token
+  namespace: {{ .Release.Namespace }}
+spec:
+  method: POST
+  url: "https://{{ .Values.zendeskSubdomain }}.zendesk.com/oauth/tokens"
+  headers:
+    Content-Type: application/x-www-form-urlencoded
+  body: {{ printf "grant_type=client_credentials&client_id={{ .client.client_id | urlquery }}&client_secret={{ .client.client_secret | urlquery }}&scope=%s&expires_in=%d" ($r.scope | urlquery) (int $r.expiresIn) | quote }}
+  result:
+    jsonPath: "$"
+  secrets:
+    - name: client
+      secretRef:
+        name: {{ $r.clientSecretName }}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ .Release.Name }}-oauth-token
+  namespace: {{ .Release.Namespace }}
+spec:
+  refreshInterval: {{ $r.refreshInterval | quote }}
+  target:
+    name: {{ $r.tokenSecretName }}
+    creationPolicy: Owner
+  dataFrom:
+    - sourceRef:
+        generatorRef:
+          apiVersion: generators.external-secrets.io/v1alpha1
+          kind: Webhook
+          name: {{ .Release.Name }}-oauth-token
+{{- end }}

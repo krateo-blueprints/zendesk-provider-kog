@@ -24,3 +24,19 @@ resourceGroup: zendesk.krateo.io
 # different release name AND a different resourceGroup (two installs sharing a group would fight over
 # the same CRDs).
 zendeskSubdomain: ""
+
+# OAuth token rotation by the External Secrets Operator (ESO >= 2.x must be installed).
+# Zendesk OAuth access tokens from the client_credentials grant EXPIRE (30 min by default, 48 h at
+# most) and no refresh token is issued, so a static token Secret would go stale. When enabled, the
+# chart ships an ESO Webhook generator that POSTs to https://<zendeskSubdomain>.zendesk.com/oauth/tokens
+# with the OAuth client from `clientSecretName` (keys client_id, client_secret; the Secret must carry
+# the label external-secrets.io/type=webhook), and an ExternalSecret that rewrites `tokenSecretName`
+# (key access_token) every `refreshInterval`. Keep refreshInterval well under expiresIn.
+oauth:
+  rotation:
+    enabled: false
+    clientSecretName: zendesk-oauth-client
+    tokenSecretName: zendesk-oauth-token
+    scope: "read write"
+    expiresIn: 7200
+    refreshInterval: 1h
