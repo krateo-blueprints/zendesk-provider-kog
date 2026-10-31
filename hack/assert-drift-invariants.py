@@ -297,6 +297,12 @@ def main(root="."):
         if doc.get("security") != [{"bearerAuth": []}]:
             fail("%s: top-level security must be exactly [bearerAuth]." % asset)
 
+        # 12. Every verb sends Accept: application/json. Zendesk refuses requests without it (415, even on
+        #     a bodiless GET), and a refused observe looks like a transient error rather than a mapping bug.
+        for vd in verbs.values():
+            if {"name": "Accept", "value": "application/json"} not in (vd.get("headers") or []):
+                fail("%s: verb %s %s lacks header Accept: application/json." % (rdpath, vd.get("method"), vd.get("path")))
+
         # 11. Soft-delete tombstones.
         need = REQUIRED_NOT_FOUND_BODY.get(kind)
         if need:
