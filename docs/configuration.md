@@ -54,7 +54,7 @@ create body only: sent once, never compared, never re-sent. **Excluded** fields 
 | comment | create-only | write-only (response has `description` instead); on update Zendesk **adds** a new comment |
 | status | create-only | agent/automation-owned; solved→closed is automatic and a closed ticket rejects updates (422) |
 | priority, type, group_id, assignee_id | create-only | initial triage; comparing would revert agents' changes |
-| organization_id, requester, requester_id, submitter_id | create-only | identity of the request; `requester` is write-only |
+| organization_id, requester, requester_id, submitter_id | create-only | identity of the request; `requester` is write-only. `organization_id` is honoured only if the requester belongs to that organization; otherwise Zendesk silently files the ticket under the requester's own organization (201, no error) |
 | tags | create-only | triggers and drop-down fields add tags; update replaces the set |
 | custom_fields | create-only | request `[{id,value}]` for some fields; response lists every field on the form |
 | ticket_form_id, brand_id | create-only | set once |

@@ -182,7 +182,10 @@ components:
         submitter_id:
           type: integer
           format: int64
-        # CREATE-ONLY. Must be an organization the requester belongs to (Zendesk rejects otherwise).
+        # CREATE-ONLY. Honoured only if the requester belongs to this organization. Otherwise Zendesk does
+        # NOT reject the request: it creates the ticket (201) and silently sets organization_id to the
+        # requester's own organization (measured live). Make the requester a member of the tenant's
+        # Organization, or expect the ticket to land in the requester's organization.
         organization_id:
           type: integer
           format: int64
