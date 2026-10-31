@@ -1,0 +1,221 @@
+# Trimmed from Zendesk's official Support API OpenAPI document
+# (https://developer.zendesk.com/zendesk/oas.yaml, operations CreateOrganization / ShowOrganization /
+# UpdateOrganization / DeleteOrganization). Every deviation from that document is commented where it
+# is made.
+#
+# Bodies are declared UNWRAPPED (the CR domain); on the wire Zendesk takes and returns
+# {"organization": {...}}. rd-organization.yaml wraps the request and unwraps every response.
+# assets/ticket.yaml has the full reasoning.
+openapi: 3.0.3
+info:
+  title: Zendesk Support API - Organizations
+  # Official: 2.0.0 — see assets/ticket.yaml for why `v2`.
+  version: v2
+servers:
+  # Official URL template, substituted by the chart's ConfigMap — see assets/ticket.yaml.
+  - url: https://{subdomain}.{domain}.com
+    variables:
+      subdomain:
+        default: your-subdomain
+      domain:
+        default: zendesk
+paths:
+  /api/v2/organizations:
+    post:
+      operationId: CreateOrganization
+      summary: Create Organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationCreateInput'
+      responses:
+        '201':
+          description: Created organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+  /api/v2/organizations/{organization_id}:
+    get:
+      operationId: ShowOrganization
+      summary: Show Organization
+      # Official also declares include / include_boundary_indicators / include_item_cursors query
+      # parameters; dropped (they would become spec fields).
+      parameters:
+        - $ref: '#/components/parameters/organization_id'
+      responses:
+        '200':
+          description: Organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+    put:
+      operationId: UpdateOrganization
+      summary: Update Organization
+      parameters:
+        - $ref: '#/components/parameters/organization_id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationUpdateInput'
+      responses:
+        '200':
+          description: Updated organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+    # Hard delete: Show Organization answers 404 afterwards. Deleting an organization detaches its
+    # users and tickets from it; it does not delete them.
+    delete:
+      operationId: DeleteOrganization
+      summary: Delete Organization
+      parameters:
+        - $ref: '#/components/parameters/organization_id'
+      responses:
+        '204':
+          description: No content
+components:
+  securitySchemes:
+    # Official declares basicAuth, bearerAuth and oauth2; trimmed to basicAuth — see assets/ticket.yaml.
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    organization_id:
+      name: organization_id
+      in: path
+      required: true
+      description: The ID of an organization
+      # Official: integer/int64. Declared string (path substitution form; never a spec field).
+      schema:
+        type: string
+  schemas:
+    OrganizationCreateInput:
+      type: object
+      required:
+        - name
+      properties:
+        # COMPARED. Zendesk trims leading/trailing whitespace before storing and rejects `|`, so a name
+        # carrying either would never compare equal to what comes back. The pattern (not in the
+        # official document) rejects such a name at admission instead of letting it drift.
+        name:
+          type: string
+          pattern: '^[^|\s]([^|]*[^|\s])?$'
+        # COMPARED. Free text. Set a value or leave it out; "" and null are not proven to round-trip.
+        details:
+          type: string
+        # COMPARED. NOTE: a token whose agent may only edit notes gets 200 on every other field while
+        # Zendesk silently ignores it — those fields would then never converge. Use an admin's token.
+        notes:
+          type: string
+        # COMPARED — the natural per-tenant key. Zendesk treats it case-INSENSITIVELY ("company1" and
+        # "Company1" collide). The pattern (not in the official document, which also allows an integer
+        # on update) forbids upper-case so the stored value and the CR value cannot differ by case.
+        external_id:
+          type: string
+          pattern: '^[^A-Z]+$'
+        # COMPARED. New tickets from this organization's users go to this group (a Group CR's status.id).
+        group_id:
+          type: integer
+          format: int64
+        # CREATE-ONLY. Destructive replace on update ("every omitted domain is deleted") and Zendesk
+        # normalises entries; not proven to round-trip in order and case.
+        domain_names:
+          type: array
+          items:
+            type: string
+        # CREATE-ONLY. Destructive replace on update, normalised by Zendesk, and silently ignored when
+        # the account lacks the user_and_organization_tags feature (which would read as eternal drift).
+        tags:
+          type: array
+          items:
+            type: string
+        # CREATE-ONLY. Update MERGES keys rather than replacing, unknown keys are silently ignored, and
+        # values come back typed by the field definition (checkbox -> boolean, decimal -> number), so a
+        # string-typed spec value would not compare equal. Official: additionalProperties oneOf
+        # string|number|boolean|array|null; trimmed to string values.
+        organization_fields:
+          type: object
+          additionalProperties:
+            type: string
+        # CREATE-ONLY. Zendesk couples ticket_restriction, shared_tickets and shared_comments: the
+        # stored value depends on account features (enable_sync_ticket_restriction), shared_comments is
+        # reset to false whenever tickets are not shared, and ticket_restriction "takes precedence".
+        # None of them is guaranteed to read back as written.
+        ticket_restriction:
+          type: string
+          enum:
+            - restricted
+            - organization
+            - organization_and_descendants
+        shared_comments:
+          type: boolean
+        # `shared_tickets` (official, deprecated in favour of ticket_restriction) is NOT modelled.
+    # UPDATE body = the compared set.
+    OrganizationUpdateInput:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: '^[^|\s]([^|]*[^|\s])?$'
+        details:
+          type: string
+        notes:
+          type: string
+        external_id:
+          type: string
+          pattern: '^[^A-Z]+$'
+        group_id:
+          type: integer
+          format: int64
+    # RESPONSE in the CR domain (the `organization` object, unwrapped).
+    Organization:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        url:
+          type: string
+        name:
+          type: string
+        details:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        external_id:
+          type: string
+          nullable: true
+        group_id:
+          type: integer
+          format: int64
+          nullable: true
+        domain_names:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        ticket_restriction:
+          type: string
+          nullable: true
+        shared_comments:
+          type: boolean
+        shared_tickets:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+security:
+  - basicAuth: []

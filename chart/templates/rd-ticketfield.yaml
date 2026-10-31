@@ -1,0 +1,68 @@
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: {{ .Release.Name }}-ticketfield
+  namespace: {{ .Release.Namespace }}
+spec:
+  oasPath: configmap://{{ .Release.Namespace }}/{{ .Release.Name }}-ticketfield/ticketfield.yaml
+  resourceGroup: {{ .Values.resourceGroup }}
+  resource:
+    kind: TicketField
+    # The server-assigned id: what a Ticket's custom_fields[].id refers to.
+    identifiers:
+      - id
+    # No overlap with request-body properties — see rd-ticket.yaml. In particular the observed
+    # custom_field_options (with their server-assigned option ids) are NOT projected into status under
+    # that name, because custom_field_options is a create-body field.
+    additionalStatusFields:
+      - url
+      - key
+      - created_at
+      - updated_at
+    excludedSpecFields:
+      - ticket_field_id
+    # Compares title, description, agent_description, active and required — the update body.
+    #
+    # The decisive exclusion is custom_field_options. `fullSpec` would compare it (the GET echoes it),
+    # find drift (the response carries id/raw_name/default/position per option), and send the spec's
+    # options — which carry no ids — in a PUT whose semantics are replace-by-id: every existing option
+    # removed (and its value stripped from tickets and macros), every spec option created anew. On every
+    # reconcile. `updatable`, with options absent from the update body, makes that structurally
+    # impossible; hack/assert-drift-invariants.py keeps it that way.
+    compareScope: updatable
+    configurationFields: []
+    # Wrapper handling: requestTransform {ticket_field: .} on create/update, the unwrap on
+    # create/get/update (byte-identical), none on delete. rd-ticket.yaml explains each.
+    verbsDescription:
+      - action: create
+        method: POST
+        path: /api/v2/ticket_fields
+        requestTransform:
+          inline: '{ticket_field: .}'
+        responseTransform:
+          inline: 'if (.ticket_field | type) == "object" then .ticket_field else . end'
+      - action: get
+        method: GET
+        path: /api/v2/ticket_fields/{ticket_field_id}
+        fieldMapping:
+          - inPath: ticket_field_id
+            inCustomResource: status.id
+        responseTransform:
+          inline: 'if (.ticket_field | type) == "object" then .ticket_field else . end'
+      - action: update
+        method: PUT
+        path: /api/v2/ticket_fields/{ticket_field_id}
+        fieldMapping:
+          - inPath: ticket_field_id
+            inCustomResource: status.id
+        requestTransform:
+          inline: '{ticket_field: .}'
+        responseTransform:
+          inline: 'if (.ticket_field | type) == "object" then .ticket_field else . end'
+      # Hard delete of the custom field (and its values on tickets); the verification GET answers 404.
+      - action: delete
+        method: DELETE
+        path: /api/v2/ticket_fields/{ticket_field_id}
+        fieldMapping:
+          - inPath: ticket_field_id
+            inCustomResource: status.id

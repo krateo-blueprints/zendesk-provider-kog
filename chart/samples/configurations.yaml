@@ -1,0 +1,91 @@
+# The API-token wiring each resource CR references via spec.configurationRef. Provision out-of-band
+# (never via a portal write-path). First create the credential Secret — PLACEHOLDERS ONLY below, never
+# commit a real token:
+#
+#   kubectl create secret generic zendesk-api-token -n krateo-system \
+#     --from-literal=username='<agent-email>/token' \
+#     --from-literal=password='<YOUR_ZENDESK_API_TOKEN>'
+#
+# Zendesk API-token authentication is HTTP basic auth whose USERNAME is the agent's email followed by
+# the literal suffix "/token", and whose PASSWORD is the API token itself (Admin Center > Apps and
+# integrations > Zendesk API). The OpenAPI assets declare exactly that scheme (type: http,
+# scheme: basic), so oasgen generates, per kind, a <Kind>Configuration CRD whose
+# spec.authentication.basic carries a usernameRef and a passwordRef — both Secret key selectors — and
+# adds spec.configurationRef to every resource CR. The username lives in the Secret too, so the agent
+# email is never written into a CR.
+#
+# The token's agent needs admin rights: groups, ticket fields and organizations are admin-only to
+# manage, and Zendesk silently ignores (with a 200) organization edits from agents restricted to notes,
+# which would read as drift that never converges.
+#
+# One Configuration per kind, each pointing at that Secret. They may all share a name (the kind is
+# implied by the resource that references it) — which is why all four below are `zendesk-config`.
+# You only need the Configurations for the kinds you actually use; the rest are inert.
+---
+apiVersion: zendesk.krateo.io/v1alpha1
+kind: TicketConfiguration
+metadata:
+  name: zendesk-config
+  namespace: krateo-system
+spec:
+  authentication:
+    basic:
+      usernameRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: username
+      passwordRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: password
+---
+apiVersion: zendesk.krateo.io/v1alpha1
+kind: GroupConfiguration
+metadata:
+  name: zendesk-config
+  namespace: krateo-system
+spec:
+  authentication:
+    basic:
+      usernameRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: username
+      passwordRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: password
+---
+apiVersion: zendesk.krateo.io/v1alpha1
+kind: OrganizationConfiguration
+metadata:
+  name: zendesk-config
+  namespace: krateo-system
+spec:
+  authentication:
+    basic:
+      usernameRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: username
+      passwordRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: password
+---
+apiVersion: zendesk.krateo.io/v1alpha1
+kind: TicketFieldConfiguration
+metadata:
+  name: zendesk-config
+  namespace: krateo-system
+spec:
+  authentication:
+    basic:
+      usernameRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: username
+      passwordRef:
+        name: zendesk-api-token
+        namespace: krateo-system
+        key: password

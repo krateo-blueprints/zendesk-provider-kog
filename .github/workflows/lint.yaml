@@ -1,0 +1,40 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-docs:
+    uses: krateo-platformops/.github/.github/workflows/lint-docs.yaml@main
+
+  # Every safety property of this chart is an ABSENCE or a one-line declaration: `comment`, tags,
+  # custom fields and the triage fields kept out of Ticket's update body; custom_field_options kept out
+  # of TicketField's (a replace-by-id PUT that would strip categories from live tickets); the bodies
+  # declared unwrapped; `compareScope: updatable` on every kind; the unwrap on every response. Nothing in
+  # the generated CRD records any of it, and undoing one is silent — no error, just a controller that
+  # starts re-posting comments or reverting agents. This job is the only thing that notices.
+  drift-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - run: python3 hack/assert-drift-invariants.py .
+
+  # The chart renders only with a subdomain (the asset server URL is substituted at render time), so lint
+  # and template with a placeholder one, after stamping CHART_VERSION exactly as release-oci does.
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v5.0.0
+        with:
+          version: v3.19.0
+      - run: sed -i "s/CHART_VERSION/0.0.0-ci/g" chart/Chart.yaml
+      - run: helm lint chart --strict --set zendeskSubdomain=your-subdomain
+      - run: helm template zendesk-provider-kog chart -n krateo-system --set zendeskSubdomain=your-subdomain > /dev/null

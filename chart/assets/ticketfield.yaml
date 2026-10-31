@@ -1,0 +1,265 @@
+# Trimmed from Zendesk's official Support API OpenAPI document
+# (https://developer.zendesk.com/zendesk/oas.yaml, operations CreateTicketField / ShowTicketfield /
+# UpdateTicketField / DeleteTicketField). Every deviation from that document is commented where it is
+# made.
+#
+# Bodies are declared UNWRAPPED (the CR domain); on the wire Zendesk takes and returns
+# {"ticket_field": {...}}. rd-ticketfield.yaml wraps the request and unwraps every response.
+# assets/ticket.yaml has the full reasoning.
+openapi: 3.0.3
+info:
+  title: Zendesk Support API - Ticket Fields
+  # Official: 2.0.0 — see assets/ticket.yaml for why `v2`.
+  version: v2
+servers:
+  # Official URL template, substituted by the chart's ConfigMap — see assets/ticket.yaml.
+  - url: https://{subdomain}.{domain}.com
+    variables:
+      subdomain:
+        default: your-subdomain
+      domain:
+        default: zendesk
+paths:
+  /api/v2/ticket_fields:
+    post:
+      operationId: CreateTicketField
+      summary: Create Ticket Field
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketFieldCreateInput'
+      responses:
+        '201':
+          description: Created ticket field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketField'
+  # Official declares a path-level `creator` query parameter on this item; dropped (it would become a
+  # spec field, and it only sideloads the creating user).
+  /api/v2/ticket_fields/{ticket_field_id}:
+    get:
+      operationId: ShowTicketfield
+      summary: Show Ticket Field
+      parameters:
+        - $ref: '#/components/parameters/ticket_field_id'
+      responses:
+        '200':
+          description: Ticket field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketField'
+    put:
+      operationId: UpdateTicketField
+      summary: Update Ticket Field
+      parameters:
+        - $ref: '#/components/parameters/ticket_field_id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketFieldUpdateInput'
+      responses:
+        '200':
+          description: Updated ticket field
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketField'
+    # Hard delete of a custom field (system fields cannot be deleted). Show answers 404 afterwards.
+    # Deleting the field removes its values from tickets.
+    delete:
+      operationId: DeleteTicketField
+      summary: Delete Ticket Field
+      parameters:
+        - $ref: '#/components/parameters/ticket_field_id'
+      responses:
+        '204':
+          description: No content
+components:
+  securitySchemes:
+    # Official declares basicAuth, bearerAuth and oauth2; trimmed to basicAuth — see assets/ticket.yaml.
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    ticket_field_id:
+      name: ticket_field_id
+      in: path
+      required: true
+      description: The ID of the ticket field
+      # Official: integer/int64. Declared string (path substitution form; never a spec field).
+      schema:
+        type: string
+  schemas:
+    TicketFieldCreateInput:
+      type: object
+      # Official requires only `title` (type defaults to text). `type` is required here so a category
+      # field cannot silently become a free-text field.
+      required:
+        - type
+        - title
+      properties:
+        # CREATE-ONLY — immutable after creation ("Editable only on creation").
+        # Official enum also lists partialcreditcard/partial_credit_card, lookup and multi_lookup;
+        # trimmed (lookup kinds need relationship_target_type/relationship_filter, not modelled).
+        type:
+          type: string
+          enum:
+            - checkbox
+            - date
+            - decimal
+            - integer
+            - regexp
+            - text
+            - textarea
+            - tagger
+            - multiselect
+        # COMPARED. Use plain text: a dynamic-content placeholder ({{dc.*}}) comes back RENDERED in
+        # `title` (the placeholder is in raw_title), so it would never compare equal.
+        title:
+          type: string
+        # COMPARED. Same dynamic-content caveat as title.
+        description:
+          type: string
+        # COMPARED.
+        agent_description:
+          type: string
+        # COMPARED.
+        active:
+          type: boolean
+        # COMPARED. Agents must fill the field to solve a ticket.
+        required:
+          type: boolean
+        # CREATE-ONLY — the four end-user (help center) flags are interdependent (editable/required in
+        # the portal only make sense when visible), and how Zendesk coerces an inconsistent combination
+        # is undocumented, so they are not proven to read back as written.
+        title_in_portal:
+          type: string
+        visible_in_portal:
+          type: boolean
+        editable_in_portal:
+          type: boolean
+        required_in_portal:
+          type: boolean
+        # CREATE-ONLY. Positions are re-laid-out by ticket forms on accounts that use them.
+        position:
+          type: integer
+        # CREATE-ONLY. For type regexp only.
+        regexp_for_validation:
+          type: string
+        # CREATE-ONLY. For type checkbox only: the tag added when the box is ticked.
+        tag:
+          type: string
+        # CREATE-ONLY — the drop-down options (for tagger / multiselect), i.e. the category taxonomy.
+        #
+        # Deliberately NOT in the update body, and the reason is destructive, not cosmetic. Zendesk's
+        # update semantics for this array are REPLACE-BY-ID: "Omitting an option removes it ... which
+        # removes its values from any tickets or macros", and an option sent WITHOUT its `id` is created
+        # as a NEW option. Option ids are server-assigned and live only in the response; the CR's spec
+        # cannot carry them, and a RestDefinition has no way to merge spec options with observed ids
+        # before sending. So an update carrying spec options would re-create every option and could
+        # strip category values from existing tickets — on ANY drift, e.g. a title edit.
+        #
+        # Consequence: the option list is set at creation and NOT reconciled. Adding or renaming a
+        # category afterwards is a Zendesk-side change (or a new TicketField). See README.
+        #
+        # `value` is the tag written on tickets. The pattern (not in the official document) restricts
+        # it to what Zendesk accepts as a tag unchanged (lower-case, no spaces).
+        custom_field_options:
+          type: array
+          items:
+            type: object
+            required:
+              - name
+              - value
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+                pattern: '^[a-z0-9_:/.-]+$'
+              default:
+                type: boolean
+    # UPDATE body = the compared set: the five scalar presentation/behaviour fields that read back
+    # exactly as written. Official TicketFieldUpdateInput also accepts custom_field_options, the portal
+    # flags, position, tag, regexp_for_validation, sub_type_id, raw_* and relationship_filter; all
+    # excluded here — see TicketFieldCreateInput.
+    TicketFieldUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        agent_description:
+          type: string
+        active:
+          type: boolean
+        required:
+          type: boolean
+    # RESPONSE in the CR domain (the `ticket_field` object, unwrapped).
+    TicketField:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        url:
+          type: string
+        # A unique key Zendesk assigns to the field.
+        key:
+          type: string
+          nullable: true
+        type:
+          type: string
+        title:
+          type: string
+        raw_title:
+          type: string
+        description:
+          type: string
+        agent_description:
+          type: string
+        active:
+          type: boolean
+        required:
+          type: boolean
+        title_in_portal:
+          type: string
+        visible_in_portal:
+          type: boolean
+        editable_in_portal:
+          type: boolean
+        required_in_portal:
+          type: boolean
+        position:
+          type: integer
+        custom_field_options:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                format: int64
+              name:
+                type: string
+              raw_name:
+                type: string
+              value:
+                type: string
+              default:
+                type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+security:
+  - basicAuth: []

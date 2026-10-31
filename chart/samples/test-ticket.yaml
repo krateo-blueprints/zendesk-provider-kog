@@ -1,0 +1,43 @@
+# File a ticket.
+#
+# Zendesk assigns the ticket ID on create; it lands on `status.id`, and the get/update/delete calls
+# address the ticket through it (there is no ticket_id field to set here).
+#
+# Reconciled after creation: `subject` and `external_id` ONLY. Everything else is sent once, at
+# creation, and then belongs to the help desk:
+#   - `comment` is write-only and becomes the ticket's description. It is never re-sent (on an update it
+#     would post a NEW comment).
+#   - group_id / assignee_id / priority / type / status are the initial triage; agents and business
+#     rules own them afterwards. Their live values are mirrored, read-only, under status.observed.
+#   - tags and custom_fields are also written by triggers and by drop-down fields, and custom_fields
+#     comes back listing every field on the form, so neither can be compared.
+#
+# Deleting this CR deletes the ticket (Zendesk soft-deletes it: recoverable for 30 days). Conversely, a
+# ticket deleted in Zendesk while this CR exists is RE-CREATED on the next reconcile.
+apiVersion: zendesk.krateo.io/v2
+kind: Ticket
+metadata:
+  name: test-ticket-example
+  namespace: krateo-system
+  annotations:
+    krateo.io/connector-verbose: "true"
+spec:
+  configurationRef:
+    name: zendesk-config
+  subject: "Example request filed by Krateo"
+  external_id: "krateo-test-ticket-example"
+  comment:
+    body: "This is an example ticket created through the zendesk-provider-kog test sample."
+    public: true
+  priority: normal
+  type: question
+  requester:
+    name: "Example Requester"
+    email: "requester@example.com"
+  # organization_id: 0        # an Organization CR's status.id (the requester must be a member)
+  # group_id: 0               # a Group CR's status.id — the initial routing
+  # custom_fields:            # a TicketField CR's status.id + one of its option values
+  #   - id: 0
+  #     value: category_billing
+  # tags:
+  #   - krateo

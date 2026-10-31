@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "resourceGroup": {
+      "type": "string",
+      "default": "zendesk.krateo.io",
+      "description": "The API group every generated CRD lands under (4 resource kinds + a <Kind>Configuration auth kind for each)."
+    },
+    "zendeskSubdomain": {
+      "type": "string",
+      "default": "",
+      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)?$",
+      "description": "REQUIRED (rendering fails while empty). The <subdomain> of https://<subdomain>.zendesk.com - the subdomain only, no scheme and no dots. One install targets one Zendesk account."
+    },
+    "global": {
+      "type": "object",
+      "title": "Global values",
+      "description": "Helm global values (injected by the chart-inspector / when used as a subchart)."
+    }
+  }
+}

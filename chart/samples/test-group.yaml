@@ -1,0 +1,24 @@
+# A routing target: the group a category of tickets is assigned to.
+#
+# Zendesk assigns the group's ID on create; it lands on `status.id`, and every later call addresses the
+# group through it (there is no group_id field to set here). Feed status.id into a Ticket's or an
+# Organization's `group_id`.
+#
+# `name` and `description` are reconciled. `is_public` is sent ONLY on create (a private group cannot be
+# made public later, so comparing it could only loop).
+#
+# Deleting this CR deletes the group (Zendesk soft-deletes groups; the RestDefinition reads a group
+# marked `deleted` as gone, so the CR does not hang in Deleting).
+apiVersion: zendesk.krateo.io/v2
+kind: Group
+metadata:
+  name: test-group-platform-support
+  namespace: krateo-system
+  annotations:
+    krateo.io/connector-verbose: "true"
+spec:
+  configurationRef:
+    name: zendesk-config
+  name: "Platform Support"
+  description: "Routing target for platform tickets. Managed by Krateo."
+  is_public: true

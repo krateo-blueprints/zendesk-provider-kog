@@ -1,0 +1,102 @@
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: {{ .Release.Name }}-ticket
+  namespace: {{ .Release.Namespace }}
+spec:
+  oasPath: configmap://{{ .Release.Namespace }}/{{ .Release.Name }}-ticket/ticket.yaml
+  resourceGroup: {{ .Values.resourceGroup }}
+  resource:
+    kind: Ticket
+    # `id` is assigned by Zendesk on create and is a property of every (unwrapped) response, so status
+    # populates it and the item path is keyed off it.
+    identifiers:
+      - id
+    # NONE of these shares a name with a create- or update-body property, and that is deliberate: the
+    # controller copies a status field INTO an outgoing request body whenever the spec omits that field
+    # (builder.processFields runs over status as well as spec). A status `status`/`group_id`/`priority`
+    # would therefore be re-sent — e.g. a re-create after the ticket was deleted in Zendesk would file
+    # the new ticket as `closed`. The help-desk-owned fields are exposed instead under `observed`, which
+    # the responseTransform builds. hack/assert-drift-invariants.py enforces the no-overlap rule.
+    additionalStatusFields:
+      - url
+      - created_at
+      - updated_at
+      - observed
+    # ticket_id is server-assigned: never a spec field; get/update/delete source it from status.id.
+    excludedSpecFields:
+      - ticket_id
+    # `updatable` compares exactly the update body — subject and external_id — and both are returned
+    # verbatim. Everything else in the spec is create-only (see assets/ticket.yaml for each field).
+    #
+    # `fullSpec` (the default) would be actively harmful: it compares every spec key the GET echoes, and
+    # Zendesk echoes status, priority, type, group_id, assignee_id, tags and custom_fields. Those are
+    # either help-desk-owned (the controller would revert agents' triage), rewritten by business rules
+    # (tags), or a different shape on the way back (custom_fields lists every field on the form). Each
+    # would be permanent drift — and for a closed ticket, a 422 on every attempt.
+    compareScope: updatable
+    configurationFields: []
+    verbsDescription:
+      # WRAPPER HANDLING (same four lines on every Zendesk kind):
+      #   requestTransform  {ticket: .}  on create/update — the asset declares the CR-domain (unwrapped)
+      #                     body so that top-level body filtering keeps create-only fields out of the
+      #                     update; this restores Zendesk's envelope immediately before the call.
+      #   responseTransform on create/get/update — unwraps .ticket (dropping the sibling `audit`) and
+      #                     builds `observed`. It MUST be on all three: status is CLEARED and repopulated
+      #                     from the create and update responses too, so a missing unwrap on update would
+      #                     lose status.id and leave the next observe unable to address the ticket.
+      #                     The three copies are byte-identical (asserted). Type-guarded, so a second pass
+      #                     over an already-unwrapped body is a no-op.
+      #   delete            has NO requestTransform: it would turn an empty body into {"ticket":{}} and
+      #                     send a body on DELETE.
+      - action: create
+        method: POST
+        path: /api/v2/tickets
+        requestTransform:
+          inline: '{ticket: .}'
+        responseTransform:
+          inline: |
+            (if (.ticket | type) == "object" then .ticket else . end)
+            | .observed = {status, priority, type, group_id, assignee_id, organization_id, requester_id, tags}
+      - action: get
+        method: GET
+        path: /api/v2/tickets/{ticket_id}
+        fieldMapping:
+          - inPath: ticket_id
+            inCustomResource: status.id
+        responseTransform:
+          inline: |
+            (if (.ticket | type) == "object" then .ticket else . end)
+            | .observed = {status, priority, type, group_id, assignee_id, organization_id, requester_id, tags}
+        # Defensive. Zendesk documents Show Ticket answering 404 for a soft-deleted ticket, which the
+        # controller already reads as absent. Should a tombstone ever come back as 200 with
+        # status "deleted" instead, this keeps it reading as absent — without it the post-delete
+        # verification would see the ticket "still present" and hold the CR's finalizer forever.
+        # Evaluated on the RAW body (before responseTransform), hence the (.ticket // .) guard.
+        notFoundBody:
+          inline: '((.ticket // .) | .status) == "deleted"'
+      # PUT, not PATCH: Zendesk's update is a PUT that only touches the keys it is sent.
+      - action: update
+        method: PUT
+        path: /api/v2/tickets/{ticket_id}
+        fieldMapping:
+          - inPath: ticket_id
+            inCustomResource: status.id
+        requestTransform:
+          inline: '{ticket: .}'
+        responseTransform:
+          inline: |
+            (if (.ticket | type) == "object" then .ticket else . end)
+            | .observed = {status, priority, type, group_id, assignee_id, organization_id, requester_id, tags}
+      # DELETE soft-deletes (Deleted Tickets, purged after 30 days), then the controller verifies absence
+      # with the get verb: 404 (or the notFoundBody above) releases the finalizer.
+      #
+      # The flip side is the controller's normal level-based behaviour: if an agent deletes the ticket in
+      # Zendesk while the CR still exists, the next observe sees 404 and CREATES A NEW TICKET (new id,
+      # the comment posted again). Delete the CR first if a ticket is meant to go away.
+      - action: delete
+        method: DELETE
+        path: /api/v2/tickets/{ticket_id}
+        fieldMapping:
+          - inPath: ticket_id
+            inCustomResource: status.id

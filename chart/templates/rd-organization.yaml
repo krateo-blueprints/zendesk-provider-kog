@@ -1,0 +1,65 @@
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: {{ .Release.Name }}-organization
+  namespace: {{ .Release.Namespace }}
+spec:
+  oasPath: configmap://{{ .Release.Namespace }}/{{ .Release.Name }}-organization/organization.yaml
+  resourceGroup: {{ .Values.resourceGroup }}
+  resource:
+    kind: Organization
+    # The server-assigned id. (external_id is the natural per-tenant key, but it is optional and
+    # mutable, so it cannot be the identity.)
+    identifiers:
+      - id
+    # No overlap with request-body properties — see rd-ticket.yaml.
+    additionalStatusFields:
+      - url
+      - created_at
+      - updated_at
+    excludedSpecFields:
+      - organization_id
+    # Compares name, details, notes, external_id and group_id — the update body, all scalars returned
+    # as written (the asset's patterns keep name and external_id inside what Zendesk stores unchanged).
+    #
+    # `fullSpec` would also compare domain_names, tags, organization_fields, ticket_restriction and
+    # shared_comments, every one of which Zendesk echoes in a form that is not guaranteed to match what
+    # was sent (normalised lists, typed custom-field values, feature-dependent coupling). See
+    # assets/organization.yaml for each.
+    compareScope: updatable
+    configurationFields: []
+    # Wrapper handling: requestTransform {organization: .} on create/update, the unwrap on
+    # create/get/update (byte-identical), none on delete. rd-ticket.yaml explains each.
+    verbsDescription:
+      - action: create
+        method: POST
+        path: /api/v2/organizations
+        requestTransform:
+          inline: '{organization: .}'
+        responseTransform:
+          inline: 'if (.organization | type) == "object" then .organization else . end'
+      - action: get
+        method: GET
+        path: /api/v2/organizations/{organization_id}
+        fieldMapping:
+          - inPath: organization_id
+            inCustomResource: status.id
+        responseTransform:
+          inline: 'if (.organization | type) == "object" then .organization else . end'
+      - action: update
+        method: PUT
+        path: /api/v2/organizations/{organization_id}
+        fieldMapping:
+          - inPath: organization_id
+            inCustomResource: status.id
+        requestTransform:
+          inline: '{organization: .}'
+        responseTransform:
+          inline: 'if (.organization | type) == "object" then .organization else . end'
+      # Hard delete; the verification GET then answers 404.
+      - action: delete
+        method: DELETE
+        path: /api/v2/organizations/{organization_id}
+        fieldMapping:
+          - inPath: organization_id
+            inCustomResource: status.id

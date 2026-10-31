@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-ticketfield
+  namespace: {{ .Release.Namespace }}
+data:
+  # The asset is copied verbatim EXCEPT for its server URL, which zendesk.asset (_helpers.tpl) resolves
+  # from .Values.zendeskSubdomain. It is NOT tpl-rendered: the asset may contain literal double-brace text
+  # (Zendesk dynamic-content placeholders in comments) that must not be interpreted.
+  ticketfield.yaml: |
+{{ include "zendesk.asset" (dict "root" . "file" "assets/ticketfield.yaml") | indent 4 }}

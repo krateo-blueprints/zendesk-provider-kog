@@ -1,0 +1,71 @@
+apiVersion: ogen.krateo.io/v1alpha1
+kind: RestDefinition
+metadata:
+  name: {{ .Release.Name }}-group
+  namespace: {{ .Release.Namespace }}
+spec:
+  oasPath: configmap://{{ .Release.Namespace }}/{{ .Release.Name }}-group/group.yaml
+  resourceGroup: {{ .Values.resourceGroup }}
+  resource:
+    kind: Group
+    # A group's identity is its server-assigned id (names are not unique). A routing target: put this
+    # status.id into a Ticket's group_id or an Organization's group_id.
+    identifiers:
+      - id
+    # No overlap with request-body properties (is_public is a create-body field, so it is NOT here —
+    # see rd-ticket.yaml for why a status field must not share a request field's name).
+    additionalStatusFields:
+      - url
+      - default
+      - deleted
+      - created_at
+      - updated_at
+    excludedSpecFields:
+      - group_id
+    # Compares name and description, the whole update body, both returned verbatim. is_public is
+    # create-only (a private group cannot be made public), so it must not be compared — which `fullSpec`
+    # would do, because the GET echoes it.
+    compareScope: updatable
+    configurationFields: []
+    # Wrapper handling: requestTransform {group: .} on create/update, the unwrap on create/get/update
+    # (byte-identical), none on delete. rd-ticket.yaml explains each.
+    verbsDescription:
+      - action: create
+        method: POST
+        path: /api/v2/groups
+        requestTransform:
+          inline: '{group: .}'
+        responseTransform:
+          inline: 'if (.group | type) == "object" then .group else . end'
+      - action: get
+        method: GET
+        path: /api/v2/groups/{group_id}
+        fieldMapping:
+          - inPath: group_id
+            inCustomResource: status.id
+        responseTransform:
+          inline: 'if (.group | type) == "object" then .group else . end'
+        # LOAD-BEARING. Groups are soft-deleted: Zendesk's Group schema carries `deleted` ("Deleted
+        # groups get marked as such"). If Show Group answers a deleted group with 200 + deleted:true,
+        # this is what makes it read as absent — for observe (so a group deleted in Zendesk is
+        # re-created rather than reported Ready) and, more importantly, for the controller's post-delete
+        # verification, which otherwise sees the group "still present" and holds the CR's finalizer
+        # forever. If Zendesk answers 404 instead, this is never reached. Evaluated on the RAW body.
+        notFoundBody:
+          inline: '((.group // .) | .deleted) == true'
+      - action: update
+        method: PUT
+        path: /api/v2/groups/{group_id}
+        fieldMapping:
+          - inPath: group_id
+            inCustomResource: status.id
+        requestTransform:
+          inline: '{group: .}'
+        responseTransform:
+          inline: 'if (.group | type) == "object" then .group else . end'
+      - action: delete
+        method: DELETE
+        path: /api/v2/groups/{group_id}
+        fieldMapping:
+          - inPath: group_id
+            inCustomResource: status.id

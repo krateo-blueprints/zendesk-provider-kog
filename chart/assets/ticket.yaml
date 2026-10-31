@@ -1,0 +1,374 @@
+# Trimmed from Zendesk's official Support API OpenAPI document
+# (https://developer.zendesk.com/zendesk/oas.yaml, operations CreateTicket / ShowTicket /
+# UpdateTicket / DeleteTicket). Every deviation from that document is commented where it is made.
+#
+# THE ONE DEVIATION THAT SHAPES THE WHOLE FILE: request and response bodies are declared UNWRAPPED.
+# On the wire Zendesk takes {"ticket": {...}} and answers {"ticket": {...}} (plus "audit" on create
+# and update). This document declares the INNER object, i.e. the shape of the Custom Resource, and
+# rd-ticket.yaml restores the wire shape: a requestTransform wraps the outgoing body ({ticket: .}) on
+# create/update, and a responseTransform unwraps every response (.ticket) on create/get/update.
+#
+# Why not keep the official wrapper here? Three things in oasgen/rest-dynamic-controller key off this
+# document, and all three only see TOP-LEVEL properties correctly for this purpose:
+#   * The CRD spec is generated from the CREATE body, so a wrapped body would put every field under
+#     spec.ticket.* — workable on its own.
+#   * The outgoing body is filtered to the properties the operation declares, but only by TOP-LEVEL
+#     key (builder.processFields). With a wrapper, the update body declares one key, `ticket`, so the
+#     WHOLE spec.ticket object would be sent on every update — including the write-only `comment`.
+#     Every drift-triggered PUT would then post the first comment AGAIN as a new comment on the ticket.
+#     That is not drift, it is spam to the requester, on every reconcile that finds any difference.
+#   * The status schema is read from the GET response schema at the identifier path, so a wrapped
+#     response would need status.ticket.id everywhere.
+# Declaring the CR-domain shape here, and converting at the wire with whole-document transforms, keeps
+# create-only fields genuinely create-only. hack/assert-drift-invariants.py fails if a `ticket` wrapper
+# property ever reappears in a request body of this file.
+openapi: 3.0.3
+info:
+  title: Zendesk Support API - Tickets
+  # Official: 2.0.0. oasgen derives the CRD API version from info.version, and "2.0.0" would become
+  # `v2-0-0` and churn on every re-trim of the vendor document. `v2` names the /api/v2 surface instead.
+  version: v2
+servers:
+  # Kept as the official URL TEMPLATE. rest-dynamic-controller uses servers[0].url verbatim and does
+  # not substitute server variables, so the chart's ConfigMap replaces this exact string with
+  # https://<.Values.zendeskSubdomain>.zendesk.com at render time (and fails the render if the string
+  # is not found exactly once). Official default for `subdomain` is "example"; replaced with an
+  # obviously-not-a-tenant placeholder so nothing can ever resolve to a real account by default.
+  - url: https://{subdomain}.{domain}.com
+    variables:
+      subdomain:
+        default: your-subdomain
+      domain:
+        default: zendesk
+paths:
+  /api/v2/tickets:
+    post:
+      operationId: CreateTicket
+      summary: Create Ticket
+      # Official also declares the `include` (sideload) query parameter. Dropped: query parameters of
+      # any verb become CR spec fields, and sideloads only add top-level keys the transform discards.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCreateInput'
+      responses:
+        '201':
+          description: Create ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+  # ticket_id is assigned by Zendesk on create: excluded from the spec, sourced from status.id by the
+  # fieldMapping in rd-ticket.yaml. Same shape as the GitHub KOG's Issue/issue_number.
+  /api/v2/tickets/{ticket_id}:
+    get:
+      operationId: ShowTicket
+      summary: Show Ticket
+      # Official also declares include / reduced_payload_size / remove_duplicate_fields query
+      # parameters. Dropped for the same reason as on create.
+      parameters:
+        - $ref: '#/components/parameters/ticket_id'
+      responses:
+        '200':
+          description: Ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+    put:
+      operationId: UpdateTicket
+      summary: Update Ticket
+      parameters:
+        - $ref: '#/components/parameters/ticket_id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketUpdateInput'
+      responses:
+        '200':
+          description: Successful request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ticket'
+    # Soft delete: the ticket moves to Deleted Tickets (recoverable for 30 days, then purged). Zendesk
+    # documents Show Ticket answering 404 for a deleted ticket; rd-ticket.yaml additionally declares a
+    # defensive notFoundBody so a tombstone answer could not hold the CR's finalizer either.
+    delete:
+      operationId: DeleteTicket
+      summary: Delete Ticket
+      parameters:
+        - $ref: '#/components/parameters/ticket_id'
+      responses:
+        '204':
+          description: No content
+components:
+  securitySchemes:
+    # Official declares basicAuth, bearerAuth and oauth2. Trimmed to basicAuth ONLY: oasgen generates
+    # one authentication method per scheme on the <Kind>Configuration, and API-token auth is HTTP basic
+    # with username "<agent-email>/token" and password "<api-token>". Both halves come from a Secret.
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    ticket_id:
+      name: ticket_id
+      in: path
+      required: true
+      description: The ID of the ticket
+      # Official: integer/int64. Declared string because that is the form a path parameter is
+      # substituted in (status.id is formatted with %v); it is never a spec field.
+      schema:
+        type: string
+  schemas:
+    # CREATE body (unwrapped TicketObject, trimmed to what a platform files a ticket with). Everything
+    # here is a CR spec field; only `subject` and `external_id` are also in TicketUpdateInput and so
+    # are compared and reconciled. Everything else is CREATE-ONLY — see the per-field notes.
+    TicketCreateInput:
+      type: object
+      # Official requires nothing inside `ticket`. `comment` is required here: it becomes the ticket's
+      # description (first comment), and a ticket filed by a platform without one is not useful.
+      required:
+        - comment
+      properties:
+        subject:
+          type: string
+          description: The subject of the ticket. If omitted, Zendesk derives it from the comment.
+        # WRITE-ONLY and CREATE-ONLY. The response has no `comment`; the first comment's text comes back
+        # as `description`. On UPDATE, Zendesk treats `comment` as "add a new comment", so it must never
+        # be in the update body (asserted by hack/assert-drift-invariants.py).
+        comment:
+          type: object
+          required:
+            - body
+          properties:
+            body:
+              type: string
+              description: The comment text (becomes the ticket description).
+            html_body:
+              type: string
+              description: The comment formatted as HTML (overrides body when set).
+            # true = public reply visible to the requester; false = internal note.
+            public:
+              type: boolean
+            author_id:
+              type: integer
+              format: int64
+              description: The comment author. Defaults to the authenticated user.
+        # CREATE-ONLY. Official `requester` is oneOf string|integer|object; trimmed to the object form
+        # (a oneOf does not survive CRD generation cleanly). Write-only: the response carries
+        # requester_id instead. Zendesk may create the user if it does not exist (account setting).
+        requester:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+            locale_id:
+              type: integer
+              format: int64
+        # CREATE-ONLY. requester_id wins over requester when both are set.
+        requester_id:
+          type: integer
+          format: int64
+        submitter_id:
+          type: integer
+          format: int64
+        # CREATE-ONLY. Must be an organization the requester belongs to (Zendesk rejects otherwise).
+        organization_id:
+          type: integer
+          format: int64
+        # CREATE-ONLY — group_id, assignee_id, priority, type and status are the help desk's TRIAGE
+        # fields. They are set once, as the initial routing, and then belong to agents and to business
+        # rules (triggers/automations). Comparing them would make the controller revert every
+        # reassignment, escalation or status change an agent makes. `status` has a second, harder
+        # reason: a solved ticket is closed by automation (solved -> closed), after which it rejects
+        # every update with 422, so a compared status could never converge.
+        group_id:
+          type: integer
+          format: int64
+        assignee_id:
+          type: integer
+          format: int64
+        priority:
+          type: string
+          enum:
+            - urgent
+            - high
+            - normal
+            - low
+        type:
+          type: string
+          enum:
+            - problem
+            - incident
+            - question
+            - task
+        status:
+          type: string
+          enum:
+            - new
+            - open
+            - pending
+            - hold
+            - solved
+            - closed
+        # CREATE-ONLY. Official is oneOf array|string; trimmed to the array form. Not reconciled because
+        # Zendesk's tag set is written by more than this CR: triggers add tags, and every drop-down
+        # custom field adds its selected option's `value` as a tag. A compared tag list would strip
+        # those on every reconcile (and the update uses set-tags semantics, which REPLACES the set).
+        tags:
+          type: array
+          items:
+            type: string
+        # CREATE-ONLY. Request shape is [{id, value}] for the fields being set; the response returns
+        # EVERY custom field on the ticket's form, nulls included, in Zendesk's order — a different
+        # length and order, i.e. permanent drift under the controller's order-sensitive array compare.
+        # Official item is oneOf {id,value} | {"<id>": value}; trimmed to {id, value}, and `value` to a
+        # string (drop-down option tags, text, numbers and dates are all accepted as strings; a
+        # multi-select value would need an array and is not supported here).
+        custom_fields:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+            properties:
+              id:
+                type: integer
+                format: int64
+              value:
+                type: string
+        # COMPARED (also in TicketUpdateInput). Round-trips verbatim.
+        external_id:
+          type: string
+          description: An id you can use to link the ticket to a local record.
+        # CREATE-ONLY. Enterprise-only in Zendesk.
+        ticket_form_id:
+          type: integer
+          format: int64
+        # CREATE-ONLY. Official is oneOf integer|string|null; trimmed to integer.
+        brand_id:
+          type: integer
+          format: int64
+    # UPDATE body. EXACTLY the fields that (a) the CR owns after creation and (b) Zendesk returns in the
+    # same shape it takes them. Under compareScope: updatable this is the compared set, so it is also
+    # the drift contract: change subject or external_id on the CR and the ticket follows; change
+    # anything else and nothing happens (by design — see TicketCreateInput).
+    #
+    # Note that a CLOSED ticket rejects all updates (422). An edit made to the CR after the ticket closed
+    # will be reported by the controller as drift that does not converge (DriftNotConverging) after its
+    # retry budget, rather than retried forever.
+    TicketUpdateInput:
+      type: object
+      properties:
+        subject:
+          type: string
+        external_id:
+          type: string
+    # RESPONSE, in the CR domain: the `ticket` object after rd-ticket.yaml's responseTransform has
+    # unwrapped it (and dropped the sibling `audit`). The transform also adds `observed` — a read-only
+    # copy of the help-desk-owned fields, so their live values are visible in the CR's status without
+    # re-using the names of create-body fields (a status field whose name matches a request-body field is
+    # copied INTO that request when the spec omits it — see assert-drift-invariants.py).
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        url:
+          type: string
+        external_id:
+          type: string
+          nullable: true
+        subject:
+          type: string
+          nullable: true
+        # The first comment's text. Never compared (not in the update body).
+        description:
+          type: string
+        status:
+          type: string
+        priority:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        group_id:
+          type: integer
+          format: int64
+          nullable: true
+        assignee_id:
+          type: integer
+          format: int64
+          nullable: true
+        organization_id:
+          type: integer
+          format: int64
+          nullable: true
+        requester_id:
+          type: integer
+          format: int64
+          nullable: true
+        tags:
+          type: array
+          items:
+            type: string
+        custom_fields:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+                format: int64
+              value:
+                type: string
+                nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        # NOT in Zendesk's schema: produced by rd-ticket.yaml's responseTransform (see above).
+        observed:
+          type: object
+          properties:
+            status:
+              type: string
+            priority:
+              type: string
+              nullable: true
+            type:
+              type: string
+              nullable: true
+            group_id:
+              type: integer
+              format: int64
+              nullable: true
+            assignee_id:
+              type: integer
+              format: int64
+              nullable: true
+            organization_id:
+              type: integer
+              format: int64
+              nullable: true
+            requester_id:
+              type: integer
+              format: int64
+              nullable: true
+            tags:
+              type: array
+              items:
+                type: string
+security:
+  - basicAuth: []

@@ -1,0 +1,30 @@
+# One organization per tenant.
+#
+# Zendesk assigns the organization's ID on create; it lands on `status.id`. A Ticket's
+# `organization_id` takes that value (and the ticket's requester must belong to the organization).
+#
+# Reconciled: name, details, notes, external_id, group_id. Sent ONLY on create: domain_names, tags,
+# organization_fields, ticket_restriction, shared_comments (Zendesk normalises, merges or couples them,
+# so they cannot be compared safely — see chart/assets/organization.yaml).
+#
+# `name` must not start or end with whitespace and must not contain "|"; `external_id` must not contain
+# upper-case letters (Zendesk compares it case-insensitively). Both are enforced at admission.
+apiVersion: zendesk.krateo.io/v2
+kind: Organization
+metadata:
+  name: test-organization-example-tenant
+  namespace: krateo-system
+  annotations:
+    krateo.io/connector-verbose: "true"
+spec:
+  configurationRef:
+    name: zendesk-config
+  name: "Example Tenant"
+  external_id: "tenant-example"
+  details: "Created by Krateo for the example tenant."
+  # group_id: 0               # a Group CR's status.id: new tickets from this org route there
+  # domain_names:             # create-only
+  #   - example.org
+  # tags:                     # create-only
+  #   - tenant
+  # ticket_restriction: restricted   # create-only

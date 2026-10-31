@@ -1,0 +1,24 @@
+apiVersion: v2
+name: zendesk-provider-kog
+description: >-
+  Krateo KOG provider (oasgen-provider >= 0.33.0) exposing the Zendesk Support API's ticketing
+  surface — tickets, groups, organizations and ticket fields — as four zendesk.krateo.io Kubernetes
+  kinds. Every kind is native: the chart ships only RestDefinitions + trimmed OpenAPI specs, with no
+  controller image and no proxy.
+type: application
+
+# release-oci substitutes CHART_VERSION from the pushed semver tag.
+version: CHART_VERSION
+# No provider image is shipped (oasgen spawns the rest-dynamic-controller). appVersion tracks the
+# OpenAPI/mapping revision.
+appVersion: "0.1.0"
+
+keywords:
+  - krateo
+  - kog
+  - oasgen-provider
+  - zendesk
+  - ticketing
+home: https://github.com/krateo-blueprints/zendesk-provider-kog
+sources:
+  - https://github.com/krateo-blueprints/zendesk-provider-kog

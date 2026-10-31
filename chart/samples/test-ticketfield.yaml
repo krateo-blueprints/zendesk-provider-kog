@@ -1,0 +1,39 @@
+# The category taxonomy: a drop-down ("tagger") custom ticket field.
+#
+# Zendesk assigns the field's ID on create; it lands on `status.id`, and a Ticket sets a category with
+# custom_fields: [{id: <that id>, value: <an option's value>}].
+#
+# Reconciled: title, description, agent_description, active, required.
+#
+# `custom_field_options` is sent ONLY on create and is NOT reconciled afterwards. Zendesk's update of
+# that list replaces options by their server-assigned id — an option sent without one is created anew,
+# and an existing option left out is removed together with its value on every ticket. A RestDefinition
+# cannot carry those ids from status into the request, so editing the options here after creation does
+# nothing. Add or rename categories in Zendesk (or create a new TicketField).
+#
+# Each option `value` is the tag written on tickets: lower-case, no spaces (enforced at admission).
+apiVersion: zendesk.krateo.io/v2
+kind: TicketField
+metadata:
+  name: test-ticketfield-category
+  namespace: krateo-system
+  annotations:
+    krateo.io/connector-verbose: "true"
+spec:
+  configurationRef:
+    name: zendesk-config
+  type: tagger
+  title: "Category"
+  description: "What the request is about."
+  agent_description: "Drives routing. Managed by Krateo."
+  active: true
+  required: false
+  visible_in_portal: true
+  editable_in_portal: true
+  custom_field_options:
+    - name: "Billing"
+      value: "category_billing"
+    - name: "Access and accounts"
+      value: "category_access"
+    - name: "Incident"
+      value: "category_incident"

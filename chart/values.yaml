@@ -1,0 +1,26 @@
+# Default values for zendesk-provider-kog.
+#
+# This chart ships RestDefinitions (ogen.krateo.io/v1alpha1) + the trimmed OpenAPI specs they
+# reference (as ConfigMaps). oasgen-provider (installed cluster-wide) watches the RestDefinitions,
+# generates the CRDs under `resourceGroup`, and auto-deploys a rest-dynamic-controller Deployment per
+# kind. There is NO provider image in this chart.
+#
+# When installed as a Krateo component, the CDC generates this chart's CRD from values.schema.json —
+# which declares ONLY top-level scalars (a scalar default materializes cleanly in the component CR;
+# nested-object toggles would not).
+
+# The API group every generated CRD lands under — 4 resource kinds plus a <Kind>Configuration auth
+# kind for each. All of them are always installed; the chart has no per-kind toggle, because a
+# RestDefinition costs nothing until a CR exists.
+resourceGroup: zendesk.krateo.io
+
+# REQUIRED. The <subdomain> of the Zendesk account, https://<subdomain>.zendesk.com — the subdomain
+# only, no scheme and no dots. Rendering fails while it is empty.
+#
+# It is a chart value, not a per-Configuration field, because rest-dynamic-controller sends every call
+# to the OpenAPI document's servers[0].url verbatim (server variables are not substituted) and a
+# Configuration CR can only supply path/query/header/cookie parameters, never the host. One install
+# therefore targets one Zendesk account. To drive a second account, install the chart again under a
+# different release name AND a different resourceGroup (two installs sharing a group would fight over
+# the same CRDs).
+zendeskSubdomain: ""

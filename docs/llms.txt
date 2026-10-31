@@ -1,0 +1,37 @@
+# zendesk-provider-kog — LLM doc index
+# A Krateo KOG provider (oasgen-provider >= 0.33.0) exposing the Zendesk Support API's ticketing surface
+# as four zendesk.krateo.io kinds: Ticket, Group, Organization, TicketField. The chart ships
+# RestDefinitions + trimmed OpenAPI documents and nothing else; oasgen-provider generates the CRDs and a
+# rest-dynamic-controller per kind. Bodies are declared UNWRAPPED in the assets; each RestDefinition
+# wraps requests ({ticket: .}) and unwraps responses (.ticket). compareScope is updatable everywhere and
+# update bodies are deliberately narrow; everything else is create-only. One install = one Zendesk
+# account (zendeskSubdomain), because the controller does not substitute OpenAPI server variables.
+README.md: what it is, the kind table, install, configure (values + basic-auth Secret), examples, docs, release
+docs/index.md: the map — the four kinds, the facts that hold across them, links to the bundle
+docs/overview.md: how it works — RestDefinitions -> CRDs + controllers, the envelope transforms, drift scope, deletion semantics, the server URL
+docs/usage.md: install, credentials, apply order, verify
+docs/configuration.md: values, per-kind mappings, compared / create-only / excluded tables, OAS deviations, invariants
+docs/api.md: the generated CRDs (spec/status per kind), the Configuration kinds, the CompositionDefinition
+docs/examples.md: index of the runnable examples
+docs/release.md: one plain-semver tag drives release-oci; the chart is the only artifact
+docs/log.md: curated history
+chart/Chart.yaml: chart metadata (version stamped from the tag)
+chart/values.yaml: resourceGroup + zendeskSubdomain (required)
+chart/values.schema.json: the component CRD source
+chart/templates/_helpers.tpl: zendesk.asset — resolves the server URL, fails the render on a missing/invalid subdomain
+chart/assets/ticket.yaml: Ticket OAS (create/show/update/delete), field-by-field decisions
+chart/assets/group.yaml: Group OAS
+chart/assets/organization.yaml: Organization OAS
+chart/assets/ticketfield.yaml: TicketField OAS
+chart/templates/rd-ticket.yaml: Ticket RestDefinition
+chart/templates/rd-group.yaml: Group RestDefinition (tombstone notFoundBody)
+chart/templates/rd-organization.yaml: Organization RestDefinition
+chart/templates/rd-ticketfield.yaml: TicketField RestDefinition
+chart/samples/configurations.yaml: the four <Kind>Configuration CRs (basic auth from a Secret)
+chart/samples/test-ticket.yaml: sample Ticket
+chart/samples/test-group.yaml: sample Group
+chart/samples/test-organization.yaml: sample Organization
+chart/samples/test-ticketfield.yaml: sample category TicketField
+hack/assert-drift-invariants.py: CI guard for every create-only absence, the envelope transforms and compareScope
+hack/preflight-refs.py: resolves chart/image references against their registries
+examples/ticketing-setup/README.md: the end-to-end walkthrough
