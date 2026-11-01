@@ -4,7 +4,7 @@ title: zendesk-provider-kog — index
 description: The map of the zendesk-provider-kog doc bundle — a Krateo KOG provider that exposes the Zendesk Support API's ticketing surface (Ticket, Group, Organization, TicketField) as zendesk.krateo.io Kubernetes kinds via oasgen-provider.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, kog, oasgen-provider, zendesk, ticketing]
-timestamp: 2026-10-31T00:00:00Z
+timestamp: 2026-11-01T00:00:00Z
 ---
 
 # zendesk-provider-kog
@@ -30,7 +30,8 @@ Four facts hold across the set:
   and that the CR owns after creation. Everything else is create-only ([configuration](./configuration.md)).
 - **One install = one Zendesk account.** The subdomain is a chart value because the controller does
   not substitute OpenAPI server variables ([configuration](./configuration.md)).
-- **oasgen-provider ≥ 0.33.0 is required** ([usage](./usage.md)).
+- **oasgen-provider ≥ 0.46.0 is required**: on older versions a create Zendesk refuses latches the
+  CR to `Available` with no `status.id` ([usage](./usage.md#prerequisite)).
 
 ## Bundle
 

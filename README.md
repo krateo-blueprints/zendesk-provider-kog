@@ -3,7 +3,7 @@
 ## What is this
 
 A Krateo **KOG** (Krateo OpenAPI Generation) provider, built on
-[`oasgen-provider`](https://github.com/krateo-platformops/oasgen-provider) **≥ 0.33.0**,
+[`oasgen-provider`](https://github.com/krateo-platformops/oasgen-provider) **≥ 0.46.0**,
 that exposes the ticketing surface of the Zendesk Support API as four Kubernetes kinds under the
 `zendesk.krateo.io` group. Each kind is listed by its create endpoint; get/update/delete sit on the
 matching item path.
@@ -54,10 +54,22 @@ auto-deploys a `rest-dynamic-controller` per kind. See [docs/overview.md](docs/o
 
 ## Install
 
-Prerequisite: a Krateo cluster with `oasgen-provider` **≥ 0.33.0**. It provides
-`restdefinitions.ogen.krateo.io`, and 0.33.0 is where the controller's post-delete verification honours
-`notFoundBody`, which `Group` relies on (Zendesk soft-deletes groups). The other features used are
-older: `requestTransform` 0.17.0, `compareScope: updatable` 0.23.0.
+Prerequisite: a Krateo cluster with `oasgen-provider` **≥ 0.46.0**. It provides
+`restdefinitions.ogen.krateo.io` and the `rest-dynamic-controller` every kind runs on.
+
+> **Why 0.46.0.** Before it
+> ([oasgen-provider#347](https://github.com/krateo-platformops/oasgen-provider/issues/347), fixed in
+> 0.46.0), a create that Zendesk refuses (for example a `Group` with `is_public: false` on an account
+> without private groups: 422 *"Private groups are not enabled for this account"*) latched the CR to
+> `Ready=True` / `Available` after about two minutes, with no `status.id`. A resource that does not
+> exist in Zendesk reported Available. On 0.46.0 the CR stays `Creating` with `ReconcileError` and the
+> vendor's reason, and never becomes Available. Both behaviours were observed against a live Zendesk
+> account (0.44.0 latched; 0.46.0 held `Creating` for 6 minutes), and the full four-kind end-to-end run
+> passes on 0.46.0.
+
+The older features the chart uses all predate it: post-delete verification honouring `notFoundBody`
+(0.33.0; `Group` relies on it because Zendesk soft-deletes groups), `compareScope: updatable` (0.23.0)
+and `requestTransform` (0.17.0).
 
 Per the Krateo "everything is a Composition" rule, this chart is installed as a **component** (a
 `CompositionDefinition` the core-provider CDC derives from `values.schema.json`), not via
@@ -147,7 +159,8 @@ The full documentation bundle follows the Krateo Documentation Standard:
   `CHART_VERSION` and packages `chart/` to `oci://ghcr.io/krateo-blueprints/charts`. The chart is the
   only release artifact. Details: [docs/release.md](docs/release.md).
 - **CI.** `lint.yaml` runs the shared `lint-docs` check, `hack/assert-drift-invariants.py` (every
-  create-only absence, the envelope transforms, `compareScope: updatable`), and `helm lint`/`template`
+  create-only absence, the envelope transforms, `compareScope: updatable`, one stated oasgen-provider
+  minimum across the chart and docs), and `helm lint`/`template`
   with a placeholder subdomain. `preflight-refs.yaml` resolves chart/image references, and
   `security.yml` runs the shared org security workflow.
 

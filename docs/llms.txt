@@ -1,16 +1,18 @@
 # zendesk-provider-kog — LLM doc index
-# A Krateo KOG provider (oasgen-provider >= 0.33.0) exposing the Zendesk Support API's ticketing surface
+# A Krateo KOG provider (oasgen-provider >= 0.46.0) exposing the Zendesk Support API's ticketing surface
 # as four zendesk.krateo.io kinds: Ticket, Group, Organization, TicketField. The chart ships
 # RestDefinitions + trimmed OpenAPI documents and nothing else; oasgen-provider generates the CRDs and a
 # rest-dynamic-controller per kind. Bodies are declared UNWRAPPED in the assets; each RestDefinition
 # wraps requests ({ticket: .}) and unwraps responses (.ticket). compareScope is updatable everywhere and
 # update bodies are deliberately narrow; everything else is create-only. One install = one Zendesk
 # account (zendeskSubdomain), because the controller does not substitute OpenAPI server variables.
-README.md: what it is, the kind table, install, configure (values + basic-auth Secret), examples, docs, release
+# oasgen-provider >= 0.46.0 is required: older versions latch a create Zendesk refuses to Available with
+# no status.id (oasgen-provider#347).
+README.md: what it is, the kind table, install (oasgen-provider >= 0.46.0 and why), configure (values + OAuth bearer token kept fresh by ESO), examples, docs, release
 docs/index.md: the map — the four kinds, the facts that hold across them, links to the bundle
 docs/overview.md: how it works — RestDefinitions -> CRDs + controllers, the envelope transforms, drift scope, deletion semantics, the server URL
 docs/usage.md: install, credentials, apply order, verify
-docs/configuration.md: values, per-kind mappings, compared / create-only / excluded tables, OAS deviations, invariants
+docs/configuration.md: requirements, values, per-kind mappings, compared / create-only / excluded tables, OAS deviations, invariants
 docs/api.md: the generated CRDs (spec/status per kind), the Configuration kinds, the CompositionDefinition
 docs/examples.md: index of the runnable examples
 docs/release.md: one plain-semver tag drives release-oci; the chart is the only artifact

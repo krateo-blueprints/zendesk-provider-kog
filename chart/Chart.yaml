@@ -1,7 +1,9 @@
 apiVersion: v2
 name: zendesk-provider-kog
+# Minimum oasgen-provider 0.46.0: below it a create the vendor refuses latches the CR to Available with
+# no status.id (oasgen-provider#347). hack/assert-drift-invariants.py keeps this in step with the docs.
 description: >-
-  Krateo KOG provider (oasgen-provider >= 0.33.0) exposing the Zendesk Support API's ticketing
+  Krateo KOG provider (oasgen-provider >= 0.46.0) exposing the Zendesk Support API's ticketing
   surface — tickets, groups, organizations and ticket fields — as four zendesk.krateo.io Kubernetes
   kinds. Every kind is native: the chart ships only RestDefinitions + trimmed OpenAPI specs, with no
   controller image and no proxy.

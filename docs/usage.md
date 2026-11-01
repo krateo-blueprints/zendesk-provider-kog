@@ -4,16 +4,24 @@ title: zendesk-provider-kog — usage
 description: How to run the provider — install it as a Krateo component with the Zendesk subdomain, provision the OAuth client Secret (the External Secrets Operator keeps the bearer token fresh) and one Configuration per kind, create Organization, Group, TicketField and Ticket CRs in dependency order, and verify the generated CRDs and controllers.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, install, oasgen-provider, zendesk]
-timestamp: 2026-10-31T00:00:00Z
+timestamp: 2026-11-01T00:00:00Z
 ---
 
 # Usage
 
 ## Prerequisite
 
-A Krateo cluster with `oasgen-provider` **≥ 0.33.0** (post-delete verification honouring
-`notFoundBody`, which Group relies on). Also used: `requestTransform` (≥ 0.17.0) and
-`compareScope: updatable` (≥ 0.23.0).
+A Krateo cluster with `oasgen-provider` **≥ 0.46.0**.
+
+Before 0.46.0 ([oasgen-provider#347](https://github.com/krateo-platformops/oasgen-provider/issues/347)),
+a create that Zendesk refuses (for example 422 *"Private groups are not enabled for this account"*)
+latched the CR to `Ready=True` / `Available` after about two minutes, with no `status.id`: a resource
+that does not exist reported Available. From 0.46.0 the CR stays `Creating` with `ReconcileError` and
+never becomes Available. Check the installed oasgen-provider version (its image tag) before relying on
+`Ready`.
+
+Also used, all older: post-delete verification honouring `notFoundBody` (≥ 0.33.0, which Group relies
+on), `compareScope: updatable` (≥ 0.23.0) and `requestTransform` (≥ 0.17.0).
 
 ## Install
 

@@ -45,6 +45,24 @@ import yaml
 
 PLACEHOLDER = "https://{subdomain}.{domain}.com"
 
+# The minimum oasgen-provider this chart supports, and every file that states it. Below 0.46.0
+# (oasgen-provider#347, fixed by #350) a create the vendor refuses (e.g. Zendesk 422 "Private groups are
+# not enabled for this account") latches the CR to Ready=True/Available after ~2 minutes with no
+# status.id: a resource that does not exist reports Available. The version is hand-written in each file
+# below, so this check is what keeps them from drifting apart.
+MIN_OASGEN = "0.46.0"
+MIN_OASGEN_FILES = [
+    "README.md",
+    "chart/Chart.yaml",
+    "chart/values.yaml",
+    "docs/index.md",
+    "docs/usage.md",
+    "docs/configuration.md",
+    "docs/llms.txt",
+]
+# `oasgen-provider` ≥ 0.46.0, oasgen-provider >= 0.46.0, [`oasgen-provider`](url) **≥ 0.46.0**, etc.
+MIN_OASGEN_RE = re.compile(r"oasgen-provider[`*\]]*(?:\([^)\s]*\))?[`*\s]*(?:≥|>=)\s*\**\s*(\d+\.\d+\.\d+)")
+
 # kind -> where it lives and what Zendesk wraps it in
 KINDS = {
     "Ticket": {
@@ -310,6 +328,17 @@ def main(root="."):
             if need not in nfb:
                 fail("%s: %s get must declare a notFoundBody testing `%s`: %s resources are soft-deleted, and without "
                      "it the post-delete verification holds the CR's finalizer forever." % (rdpath, kind, need, kind))
+
+    # 13. One minimum oasgen-provider version, stated in every file that names one.
+    for path in MIN_OASGEN_FILES:
+        with open("%s/%s" % (root, path)) as fh:
+            found = MIN_OASGEN_RE.findall(fh.read())
+        if not found:
+            fail("%s: must state the minimum oasgen-provider (>= %s)." % (path, MIN_OASGEN))
+        for v in found:
+            if v != MIN_OASGEN:
+                fail("%s: states oasgen-provider >= %s; the minimum is %s (below it a refused create latches "
+                     "to Available, oasgen-provider#347)." % (path, v, MIN_OASGEN))
 
     if failures:
         print("drift-invariant check FAILED:\n")
