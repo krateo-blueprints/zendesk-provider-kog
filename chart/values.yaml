@@ -5,6 +5,9 @@
 # generates the CRDs under `resourceGroup`, and auto-deploys a rest-dynamic-controller Deployment per
 # kind. There is NO provider image in this chart.
 #
+# Requires oasgen-provider >= 0.46.0: on older versions a create Zendesk refuses (e.g. 422) latches the
+# CR to Ready=True/Available with no status.id (oasgen-provider#347). See README "Install".
+#
 # When installed as a Krateo component, the CDC generates this chart's CRD from values.schema.json —
 # which declares ONLY top-level scalars (a scalar default materializes cleanly in the component CR;
 # nested-object toggles would not).

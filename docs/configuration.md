@@ -1,13 +1,24 @@
 ---
 type: Configuration
 title: zendesk-provider-kog — configuration
-description: The whole config surface — the chart values resourceGroup, zendeskSubdomain and oauth.rotation, the four RestDefinition mappings (identifiers, status fields, compareScope, verbs, envelope transforms), the per-field compared / create-only / excluded decisions with reasons, every deviation from Zendesk's OpenAPI document, and the invariants hack/assert-drift-invariants.py enforces.
+description: The whole config surface — the chart values resourceGroup, zendeskSubdomain and oauth.rotation, the four RestDefinition mappings (identifiers, status fields, compareScope, verbs, envelope transforms), the per-field compared / create-only / excluded decisions with reasons, every deviation from Zendesk's OpenAPI document, the minimum oasgen-provider version, and the invariants hack/assert-drift-invariants.py enforces.
 resource: oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog
 tags: [krateo, values, restdefinition, oasgen-provider, zendesk]
-timestamp: 2026-10-31T00:00:00Z
+timestamp: 2026-11-01T00:00:00Z
 ---
 
 # Configuration
+
+## Requirements
+
+| Requirement | Minimum | Why |
+|-------------|---------|-----|
+| `oasgen-provider` | **≥ 0.46.0** | Older versions latch a create the vendor refuses (e.g. Zendesk 422 *"Private groups are not enabled for this account"*) to `Ready=True` / `Available` with no `status.id` ([oasgen-provider#347](https://github.com/krateo-platformops/oasgen-provider/issues/347)). On 0.46.0 the CR stays `Creating` / `ReconcileError` |
+| External Secrets Operator | ≥ 2.x | Only when `oauth.rotation.enabled` |
+
+The chart cannot enforce `oasgen-provider` ≥ 0.46.0 at install time, because oasgen-provider is a
+separate, cluster-wide component. Invariant 13 below keeps the stated minimum identical across the chart
+and the docs.
 
 ## Chart values
 
@@ -122,5 +133,9 @@ Each one is commented where it is made in `chart/assets/<kind>.yaml`. In summary
 7. No identifier or status field shares a name with a request-body property.
 8. Every verb's path and method exist in its asset, and mapped path parameters exist on the path.
 9. `servers[0].url` is the official template, present exactly once.
-10. Security is exactly HTTP basic.
+10. Security is exactly the HTTP bearer scheme (`bearerAuth`).
 11. Group's get declares a `notFoundBody` on `.deleted`.
+12. Every verb sends `Accept: application/json`.
+13. Every file that states the minimum oasgen-provider (README, `chart/Chart.yaml`,
+    `chart/values.yaml`, `docs/index.md`, `docs/usage.md`, this page, `docs/llms.txt`) states the same
+    one, 0.46.0.
