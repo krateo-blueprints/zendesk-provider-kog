@@ -156,8 +156,9 @@ The full documentation bundle follows the Krateo Documentation Standard:
 - **Chart.** `chart/` is the single first-class chart; `chart/values.schema.json` types its values
   (and is what the CDC derives the component CRD from).
 - **Release.** One plain-semver tag (`X.Y.Z`, no `v`) drives `release-oci.yaml`, which stamps
-  `CHART_VERSION` and packages `chart/` to `oci://ghcr.io/krateo-blueprints/charts`. The chart is the
-  only release artifact. Details: [docs/release.md](docs/release.md).
+  `CHART_VERSION`, packages `chart/` to `oci://ghcr.io/krateo-blueprints/charts` and publishes the
+  same archive to the Marketplace's `operators` index, per the organisation's publishing standard
+  (krateo-blueprints/charts `PUBLISHING.md`). The chart is the only release artifact. Details: [docs/release.md](docs/release.md).
 - **CI.** `lint.yaml` runs the shared `lint-docs` check, `hack/assert-drift-invariants.py` (every
   create-only absence, the envelope transforms, `compareScope: updatable`, one stated oasgen-provider
   minimum across the chart and docs), and `helm lint`/`template`

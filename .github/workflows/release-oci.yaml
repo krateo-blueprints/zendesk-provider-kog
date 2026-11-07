@@ -1,6 +1,7 @@
-# Canonical Krateo OCI package-build workflow — THE single way every krateo-* repo builds
-# and publishes Helm packages. Identical byte-for-byte across ALL repos (no per-repo config):
-# it is fully shape-agnostic and discovers what to publish from the repo layout itself.
+# Krateo OCI package-build workflow, derived from the canonical one every krateo-* repo uses to
+# build and publish Helm packages. It is fully shape-agnostic and discovers what to publish from
+# the repo layout itself; it differs from the canonical copy by the Marketplace-index publication
+# the organisation's publishing standard requires (see below).
 #
 # What it publishes: every FIRST-CLASS chart in the repo — any directory containing a
 # Chart.yaml that is NOT a vendored subchart (i.e. not sitting in some other chart's
@@ -21,11 +22,18 @@
 # Collision guard: refuses to push unless OCI_REPO carries a chart-namespace path segment,
 # so a chart named e.g. `frontend` can never collide with a same-named container image at
 # the registry root. Universal, harmless for every repo.
+#
+# Every chart is published twice, with the same bytes (krateo-blueprints/charts PUBLISHING.md):
+# to OCI_REPO by this job, and to the helm index the portal Marketplace installs from
+# (https://krateo-blueprints.github.io/charts/operators/index.yaml) by the organisation's
+# publisher, krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1. This repository's
+# chart has no CompositionDefinition, so by the standard's content rule it is an operator.
 name: release-oci
 
 on:
   push:
-    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       chart_version:
@@ -49,6 +57,43 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Refuse to release a commit no lint run ever passed on (PUBLISHING.md rule 10). A quiet check
+      # list reads as success, so the never-triggered case is the one this makes loud.
+      - name: The commit being released must have passed lint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          runs="$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/lint.yaml/runs?head_sha=${sha}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.status == "completed")] | length')"
+          ok="$(gh api \
+            "repos/${{ github.repository }}/actions/workflows/lint.yaml/runs?head_sha=${sha}&per_page=100" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          echo "lint runs on ${sha}: ${runs} completed, ${ok} successful"
+          if [ "${runs}" -eq 0 ]; then
+            echo "::error::No lint run exists for ${sha}. Dispatch lint.yaml on this commit, confirm it passes, then re-tag."
+            exit 1
+          fi
+          if [ "${ok}" -eq 0 ]; then
+            echo "::error::lint ran on ${sha} but never succeeded. Refusing to publish."
+            exit 1
+          fi
+
+      # The publish-index job below needs this secret, and it has no fallback (PUBLISHING.md rule 7).
+      # Refuse here, before anything is pushed, so a missing token fails the release instead of
+      # leaving GHCR holding a version the Marketplace index never receives.
+      - name: The Marketplace index token must be present
+        env:
+          CHARTS_PUBLISH_TOKEN: ${{ secrets.CHARTS_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "${CHARTS_PUBLISH_TOKEN}" ]; then
+            echo "::error::secret CHARTS_PUBLISH_TOKEN is not set, so this release could not reach the"
+            echo "::error::Marketplace index. Refusing to push to GHCR alone (krateo-blueprints/charts PUBLISHING.md rule 7)."
+            exit 1
+          fi
+
       # Collision guard: require a chart-namespace path segment under host/org (e.g. .../krateo).
       # A bare registry root (oci://ghcr.io/<org>) would push a chart named <X> to
       # ghcr.io/<org>/<X> and collide with a same-named container image. Fail fast.
@@ -71,6 +116,13 @@ jobs:
         run: |
           set -euo pipefail
           CHART_VERSION="${CHART_VERSION_INPUT:-${GITHUB_REF_NAME}}"
+          # Versions come from the tag (PUBLISHING.md rule 4), and the index records the tag each
+          # version was published from. A manual run may re-release a tag, never mint a version
+          # that no tag carries.
+          if [ "${GITHUB_REF_TYPE}" != tag ] || [ "${CHART_VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::chart version '${CHART_VERSION}' is not the tag being released ('${GITHUB_REF_NAME}', a ${GITHUB_REF_TYPE}). Run this on a tag, without a chart_version override."
+            exit 1
+          fi
           # App repo by convention: <org>/<this repo with any -chart suffix stripped>.
           APP_REPO="${GITHUB_REPOSITORY%-chart}"
           if [ -n "${APP_VERSION_INPUT}" ]; then
@@ -131,7 +183,60 @@ jobs:
             echo "::endgroup::"
           done
 
+      # The channel follows from the content (PUBLISHING.md rule 2): a chart with values.schema.json
+      # AND a CompositionDefinition is a blueprint, every other chart an operator. This workflow
+      # publishes only operators, so a chart that became a blueprint fails here, before the push,
+      # instead of reaching GHCR and being refused by the index.
+      - name: Every chart is operators content
+        run: |
+          set -euo pipefail
+          fail=0
+          for tgz in dist/*.tgz; do
+            members="$(tar tzf "$tgz")"
+            name="${members%%/*}"
+            if grep -qxF "${name}/values.schema.json" <<< "$members" \
+              && grep -qxF "${name}/compositiondefinition.yaml" <<< "$members"; then
+              echo "::error::${name} is a blueprint (schema and CompositionDefinition); this workflow publishes only operators"
+              fail=1
+            fi
+          done
+          while IFS= read -r -d '' cd; do
+            url="$(yq -r 'select(.kind == "CompositionDefinition") | .spec.chart.url' "$cd")"
+            target="${url##*/}"
+            if ls "dist/${target}-"*.tgz >/dev/null 2>&1; then
+              echo "::error::${cd} installs ${target}, which makes it a blueprint; this workflow publishes only operators"
+              fail=1
+            fi
+          done < <(find . -type f -name compositiondefinition.yaml -not -path './.git/*' -print0)
+          [ "$fail" = 0 ]
+
+      - name: Push every chart
+        run: |
+          set -euo pipefail
           for tgz in dist/*.tgz; do
             echo "Pushing ${tgz} -> ${OCI_REPO}"
             helm push "${tgz}" "${OCI_REPO}"
           done
+
+      # The same bytes that went to GHCR, for the Marketplace index.
+      - name: Hand the operator tarballs to the index job
+        uses: actions/upload-artifact@v4
+        with:
+          name: charts-operators
+          path: dist/*.tgz
+          if-no-files-found: error
+
+  # The Marketplace installs what https://krateo-blueprints.github.io/charts/operators/index.yaml
+  # lists, not what GHCR holds. The organisation's one publisher, at its major tag
+  # (krateo-blueprints/charts PUBLISHING.md); it also reads the served index and installs every
+  # chart anonymously before it succeeds.
+  publish-index:
+    needs: package-and-push
+    uses: krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1
+    with:
+      source_repo: ${{ github.repository }}
+      git_tag: ${{ github.ref_name }}
+      channel: operators
+      artifact: charts-operators
+    secrets:
+      PUBLISH_TOKEN: ${{ secrets.CHARTS_PUBLISH_TOKEN }}
