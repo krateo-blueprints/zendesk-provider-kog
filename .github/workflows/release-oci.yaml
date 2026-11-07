@@ -26,7 +26,7 @@
 # Every chart is published twice, with the same bytes (krateo-blueprints/charts PUBLISHING.md):
 # to OCI_REPO by this job, and to the helm index the portal Marketplace installs from
 # (https://krateo-blueprints.github.io/charts/operators/index.yaml) by the organisation's
-# publisher, krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1. This repository's
+# publisher, krateo-blueprints/charts/.github/workflows/publish-chart.yaml (pinned below). This repository's
 # chart has no CompositionDefinition, so by the standard's content rule it is an operator.
 name: release-oci
 
@@ -191,9 +191,17 @@ jobs:
         run: |
           set -euo pipefail
           fail=0
+          src_url="https://github.com/${GITHUB_REPOSITORY}"
           for tgz in dist/*.tgz; do
             members="$(tar tzf "$tgz")"
             name="${members%%/*}"
+            # Every chart names the repository that builds it (rule 3); the publisher refuses one
+            # that doesn't, after the push, so it is checked here.
+            srcs="$(tar -xzO -f "$tgz" "${name}/Chart.yaml" | yq -r '.sources // [] | .[]')"
+            if ! grep -qxF "$src_url" <<< "$srcs"; then
+              echo "::error::${name}: Chart.yaml sources: must list ${src_url}, the repository that builds it"
+              fail=1
+            fi
             if grep -qxF "${name}/values.schema.json" <<< "$members" \
               && grep -qxF "${name}/compositiondefinition.yaml" <<< "$members"; then
               echo "::error::${name} is a blueprint (schema and CompositionDefinition); this workflow publishes only operators"
@@ -227,12 +235,14 @@ jobs:
           if-no-files-found: error
 
   # The Marketplace installs what https://krateo-blueprints.github.io/charts/operators/index.yaml
-  # lists, not what GHCR holds. The organisation's one publisher, at its major tag
+  # lists, not what GHCR holds. The organisation's one publisher
   # (krateo-blueprints/charts PUBLISHING.md); it also reads the served index and installs every
   # chart anonymously before it succeeds.
   publish-index:
     needs: package-and-push
-    uses: krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1
+    # PUBLISHING.md rule 9: to be replaced by the 1.0.0 commit SHA (with a `# 1.0.0` comment) once
+    # tagged; .github/dependabot.yml then keeps it current.
+    uses: krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1.0.0
     with:
       source_repo: ${{ github.repository }}
       git_tag: ${{ github.ref_name }}

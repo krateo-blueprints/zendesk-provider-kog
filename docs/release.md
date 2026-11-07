@@ -24,7 +24,7 @@ organisation's publishing standard requires
 4. pushes it to `oci://ghcr.io/krateo-blueprints/charts/zendesk-provider-kog`;
 5. publishes the same archive to the Marketplace's `operators` index
    (`https://krateo-blueprints.github.io/charts/operators`) through the organisation's publisher
-   (`krateo-blueprints/charts/.github/workflows/publish-chart.yaml@1`). The portal Marketplace
+   (`krateo-blueprints/charts/.github/workflows/publish-chart.yaml`, pinned per its rule 9). The portal Marketplace
    installs from that index, not from GHCR; the publisher succeeds only once the served index lists
    the version and `helm pull --repo` installs it anonymously.
 
