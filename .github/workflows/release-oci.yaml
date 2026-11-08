@@ -205,12 +205,17 @@ jobs:
             members="$(tar tzf "$tgz")"
             name="${members%%/*}"
             # Every chart names the repository that builds it (rule 3); the publisher refuses one
-            # that doesn't, after the push, so it is checked here.
-            srcs="$(tar -xzO -f "$tgz" "${name}/Chart.yaml" | yq -r '.sources // [] | .[]')"
-            if ! grep -qxF "$src_url" <<< "$srcs"; then
+            # that doesn't, after the push, so it is checked here. Matched as the publisher (1.0.3)
+            # matches it, never stricter: case-insensitive, trailing slashes ignored, otherwise the
+            # whole URL (a /tree/main suffix or a longer name is not it).
+            # BEGIN sources-check
+            src_lc="$(tr '[:upper:]' '[:lower:]' <<< "$src_url")"
+            srcs="$(tar -xzO -f "$tgz" "${name}/Chart.yaml" | yq -r '.sources // [] | .[]' | tr '[:upper:]' '[:lower:]' | sed 's#/*$##')"
+            if ! grep -qxF "$src_lc" <<< "$srcs"; then
               echo "::error::${name}: Chart.yaml sources: must list ${src_url}, the repository that builds it"
               fail=1
             fi
+            # END sources-check
             if grep -qxF "${name}/values.schema.json" <<< "$members" \
               && grep -qxF "${name}/compositiondefinition.yaml" <<< "$members"; then
               echo "::error::${name} is a blueprint (schema and CompositionDefinition); this workflow publishes only operators"
