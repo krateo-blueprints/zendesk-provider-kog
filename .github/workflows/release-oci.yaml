@@ -232,12 +232,24 @@ jobs:
           done < <(find . -type f -name compositiondefinition.yaml -not -path './.git/*' -print0)
           [ "$fail" = 0 ]
 
+      # krateo-blueprints/charts PUBLISHING.md rule 14: charts are pushed through the organisation's chart-push
+      # action, whose push.sh retries GHCR's tag read-after-write race (and only that) onto the same digest. Locate
+      # mode: it outputs push.sh's path, and the next step runs it once per chart.
+      - name: Locate the shared chart push
+        id: chart-push
+        uses: krateo-platformops/.github/.github/actions/chart-push@653ac1e67d761584993a774c76963514968b3650 # main 2026-11-18
+
       - name: Push every chart
+        env:
+          CHART_PUSH: ${{ steps.chart-push.outputs.path }}
+          # push.sh reads the manifest back with these, after the registry login above.
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ github.token }}
         run: |
           set -euo pipefail
           for tgz in dist/*.tgz; do
             echo "Pushing ${tgz} -> ${OCI_REPO}"
-            helm push "${tgz}" "${OCI_REPO}"
+            bash "${CHART_PUSH}" "${tgz}" "${OCI_REPO}"
           done
 
       # The same bytes that went to GHCR, for the Marketplace index.
